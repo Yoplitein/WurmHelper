@@ -172,12 +172,14 @@ public class MinerBot extends Bot {
             }
             float stamina = WurmHelper.hud.getWorld().getPlayer().getStamina();
             float damage = WurmHelper.hud.getWorld().getPlayer().getDamage();
-            SelectBarRenderer sbr = ReflectionUtil.getPrivateField(WurmHelper.hud.getSelectBar(),
+            /*SelectBarRenderer sbr = ReflectionUtil.getPrivateField(WurmHelper.hud.getSelectBar(),
                     ReflectionUtil.getField(WurmHelper.hud.getSelectBar().getClass(), "renderer"));
             Object wpb = ReflectionUtil.getPrivateField(sbr,
-                    ReflectionUtil.getField(sbr.getClass(), "progressBar"));
-            float progress = ReflectionUtil.getPrivateField(wpb,
-                    ReflectionUtil.getField(wpb.getClass(), "progress"));
+                    ReflectionUtil.getField(sbr.getClass(), "progressBar"));*/
+            Object progressBar = ReflectionUtil.getPrivateField(WurmHelper.hud.getCreationWindow(),
+                    ReflectionUtil.getField(WurmHelper.hud.getCreationWindow().getClass(), "progressBar"));
+            float progress = ReflectionUtil.getPrivateField(progressBar,
+                    ReflectionUtil.getField(progressBar.getClass(), "progress"));
             if ((stamina + damage) > staminaThreshold && progress == 0f) {
                 boolean actionTaken = false;
                 if (pickaxe.getDamage() > 10)
