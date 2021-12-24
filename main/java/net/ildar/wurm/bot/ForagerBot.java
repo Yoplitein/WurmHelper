@@ -6,7 +6,7 @@ import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.mesh.GrassData;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
-import javafx.util.Pair;
+import net.ildar.wurm.Pair;
 import net.ildar.wurm.WurmHelper;
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.annotations.BotInfo;

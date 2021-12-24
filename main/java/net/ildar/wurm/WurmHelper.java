@@ -7,8 +7,6 @@ import com.wurmonline.client.startup.ServerBrowserDirectConnect;
 import com.wurmonline.client.util.Computer;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.TextField;
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.CtMethod;
@@ -479,29 +477,6 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             HookManager.getInstance().registerHook("com.wurmonline.client.renderer.gui.HeadsUpDisplay", "setActiveWindow", "(Lcom/wurmonline/client/renderer/gui/WurmComponent;)V", () -> (proxy, method, args) -> {
                 method.invoke(proxy, args);
                 components = new ArrayList<>(ReflectionUtil.getPrivateField(proxy, ReflectionUtil.getField(proxy.getClass(), "components")));
-                return null;
-            });
-
-            HookManager.getInstance().registerHook("com.wurmonline.client.startup.ServerBrowserDirectConnect", "loadOptions", "()V", () -> (proxy, method, args) -> {
-                method.invoke(proxy, args);
-                Properties properties = new Properties();
-                properties.load(new FileInputStream("autorun.properties"));
-                String defaultPassword = properties.getProperty("defaultPassword");
-                String defaultIp= properties.getProperty("defaultIp");
-                String defaultPort= properties.getProperty("defaultPort");
-                ServerBrowserDirectConnect serverBrowserDirectConnect = (ServerBrowserDirectConnect) proxy;
-                PasswordField passwordField = ReflectionUtil.getPrivateField(serverBrowserDirectConnect,
-                        ReflectionUtil.getField(ServerBrowserDirectConnect.class, "passwordField"));
-                TextField ipAddressField = ReflectionUtil.getPrivateField(serverBrowserDirectConnect,
-                        ReflectionUtil.getField(ServerBrowserDirectConnect.class, "ipAddressField"));
-                TextField portField = ReflectionUtil.getPrivateField(serverBrowserDirectConnect,
-                        ReflectionUtil.getField(ServerBrowserDirectConnect.class, "portField"));
-                if(defaultIp != null)
-                    ipAddressField.setText(defaultIp);
-                if(defaultPassword != null)
-                    passwordField.setText(defaultPassword);
-                if(defaultPort != null)
-                    portField.setText(defaultPort);
                 return null;
             });
 
