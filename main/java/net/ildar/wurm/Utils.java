@@ -26,9 +26,11 @@ public class Utils {
     /**
      * Print the message to the console
      */
-    public static void consolePrint(String message) {
-        if (message != null)
-            consoleMessages.add(message);
+    public static void consolePrint(String fmt, Object... args) {
+        if (fmt != null)
+            consoleMessages.add(
+                args.length == 0 ? fmt : String.format(fmt, args)
+            );
     }
 
     public static void showOnScreenMessage(String message) {
