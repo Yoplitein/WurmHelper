@@ -3,7 +3,6 @@ package net.ildar.wurm;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.gui.*;
-import com.wurmonline.client.startup.ServerBrowserDirectConnect;
 import com.wurmonline.client.util.Computer;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
@@ -552,9 +551,28 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
     private enum CardinalDirection {
         unknown(0),
         north(0),
+        n(0),
+        
+        northeast(45),
+        ne(45),
+        
         east(90),
+        e(90),
+        
+        southeast(135),
+        se(135),
+        
         south(180),
-        west(270);
+        s(180),
+        
+        southwest(225),
+        sw(225),
+        
+        west(270),
+        w(270),
+        
+        northwest(315),
+        nw(315);
 
         int angle;
         CardinalDirection(int angle) {
