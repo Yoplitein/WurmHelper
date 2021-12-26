@@ -39,7 +39,11 @@ public class ForesterBot extends Bot {
 
     private String containerName = DEFAULT_CONTAINER_NAME;
     private List<String> itemNamesToMove= new ArrayList<>();
-
+    
+    private Set<String> treeWhitelist = new HashSet<>();
+    private Set<String> treeBlacklist = new HashSet<>();
+    private Set<String> sproutBlacklist = new HashSet<>();
+    
     private boolean cutAllSprouts;
     private boolean harvesting;
     private boolean planting;
@@ -57,6 +61,12 @@ public class ForesterBot extends Bot {
         registerInputHandler(ForesterBot.InputKey.scn, this::setContainerName);
         registerInputHandler(ForesterBot.InputKey.na, this::setMaxActions);
         registerInputHandler(ForesterBot.InputKey.aim, this::addItemToMove);
+        registerInputHandler(ForesterBot.InputKey.atw, this::addTreeWhitelist);
+        registerInputHandler(ForesterBot.InputKey.ctw, input -> clearTreeWhitelist());
+        registerInputHandler(ForesterBot.InputKey.atb, this::addTreeBlacklist);
+        registerInputHandler(ForesterBot.InputKey.ctb, input -> clearTreeBlacklist());
+        registerInputHandler(ForesterBot.InputKey.asb, this::addSproutBlacklist);
+        registerInputHandler(ForesterBot.InputKey.csb, input -> clearSproutBlacklist());
     }
 
     @Override
@@ -100,7 +110,12 @@ public class ForesterBot extends Bot {
                         continue;
                     Tiles.Tile tileType = world.getNearTerrainBuffer().getTileType(checkedtiles[tileIndex][0], checkedtiles[tileIndex][1]);
                     byte tileData = world.getNearTerrainBuffer().getData(checkedtiles[tileIndex][0], checkedtiles[tileIndex][1]);
+                    final String treeTypeName = tileType.getTileName(tileData).toLowerCase();
+                    
                     if (tileType.isTree() || tileType.isBush()) {
+                        if(!isTreeAllowed(treeTypeName))
+                            continue;
+                        
                         FoliageAge fage = FoliageAge.getFoliageAge(tileData);
                         if (harvesting && fage.getAgeId() > FoliageAge.YOUNG_FOUR.getAgeId()
                                 && fage.getAgeId() < FoliageAge.OVERAGED.getAgeId()
@@ -126,7 +141,7 @@ public class ForesterBot extends Bot {
                                         PlayerAction.CUT_DOWN);
                             queuedTiles.add(coordsPair);
                             lastActionFinishedTime = System.currentTimeMillis();
-                        } else if (fage.getAgeName().contains("sprouting") && (cutAllSprouts || fage.getAgeName().contains("very old"))) {
+                        } else if (fage.getAgeName().contains("sprouting") && shouldPickSprout(treeTypeName) && (cutAllSprouts || fage.getAgeName().contains("very old"))) {
                             world.getServerConnection().sendAction(sickleId,
                                     new long[]{Tiles.getTileId(checkedtiles[tileIndex][0], checkedtiles[tileIndex][1], 0)},
                                     PlayerAction.PICK_SPROUT);
@@ -377,9 +392,112 @@ public class ForesterBot extends Bot {
             }
         }
     }
+    
     private void setStaminaThreshold(float s) {
         staminaThreshold = s;
         Utils.consolePrint("Current threshold for stamina is " + staminaThreshold);
+    }
+    
+    private boolean isTreeAllowed(String treeType)
+    {
+        if(!treeWhitelist.isEmpty())
+        {
+            boolean found = false;
+            for(String name: treeWhitelist)
+                if(treeType.contains(name))
+                {
+                    found = true;
+                    break;
+                }
+            
+            if(!found) return false;
+        }
+        
+        for(String name: treeBlacklist)
+            if(treeType.contains(name))
+                return false;
+        
+        return true;
+    }
+    
+    private boolean shouldPickSprout(String treeType)
+    {
+        for(String name: sproutBlacklist)
+            if(treeType.contains(name))
+                return false;
+        return true;
+    }
+    
+    private void addTreeWhitelist(String[] args)
+    {
+        if(args.length == 0)
+		{
+			printInputKeyUsageString(InputKey.atw);
+			return;
+		}
+		
+		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+		for(String name: treeNames)
+			treeWhitelist.add(name);
+        
+        Utils.consolePrint(
+            "Bot will only work on trees of type: %s",
+			String.join(", ", treeWhitelist)
+        );
+    }
+    
+    private void clearTreeWhitelist()
+    {
+        treeWhitelist.clear();
+        Utils.consolePrint("Bot will work on all tree types");
+    }
+    
+    private void addTreeBlacklist(String[] args)
+    {
+        if(args.length == 0)
+		{
+			printInputKeyUsageString(InputKey.atb);
+			return;
+		}
+		
+		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+		for(String name: treeNames)
+			treeBlacklist.add(name);
+        
+        Utils.consolePrint(
+            "Bot will skip working on tree types: %s",
+			String.join(", ", treeBlacklist)
+        );
+    }
+    
+    private void clearTreeBlacklist()
+    {
+        treeBlacklist.clear();
+        Utils.consolePrint("Bot will not skip any tree types");
+    }
+    
+    private void addSproutBlacklist(String[] args)
+    {
+        if(args.length == 0)
+		{
+			printInputKeyUsageString(InputKey.asb);
+			return;
+		}
+		
+		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+		for(String name: treeNames)
+			sproutBlacklist.add(name);
+        
+        Utils.consolePrint(
+            "Bot will skip picking sprouts from tree types: %s",
+			String.join(", ", sproutBlacklist)
+        );
+    }
+    
+    private void clearSproutBlacklist()
+    {
+        sproutBlacklist.clear();
+        Utils.consolePrint("Bot will pick sprouts from all tree types");
     }
 
     enum InputKey implements Bot.InputKey {
@@ -392,7 +510,13 @@ public class ForesterBot extends Bot {
         p("Toggle the planting", ""),
         scn("Set the new name for containers to put sprouts/harvest", "container_name"),
         na("Set the number of actions bot will do each time", "number"),
-        aim("Add new item name for moving into containers", "item_name");
+        aim("Add new item name for moving into containers", "item_name"),
+        atw("Add whitelisted tree type", "tree_name"),
+        ctw("Clear whitelisted tree types", ""),
+        atb("Add blacklisted tree type", "tree_name"),
+        ctb("Clear blacklisted tree types", ""),
+        asb("Add blacklisted tree type for sprout picking", "tree_name"),
+        csb("Clear blacklisted tree types for sprout picking", "");
 
         private String description;
         private String usage;
