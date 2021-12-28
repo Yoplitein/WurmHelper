@@ -3,6 +3,7 @@ package net.ildar.wurm.bot;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.gui.InventoryListComponent;
@@ -21,6 +22,7 @@ public class ContainerItemGetterBot extends Bot
 {
 	HashSet<String> items = new HashSet<>();
 	HashSet<InventoryListComponent> sources = new HashSet<>();
+	boolean verbose = false;
 	
 	public ContainerItemGetterBot()
 	{
@@ -28,6 +30,7 @@ public class ContainerItemGetterBot extends Bot
 		registerInputHandler(Inputs.c, input -> clearItems());
 		registerInputHandler(Inputs.ss, input -> addSource());
 		registerInputHandler(Inputs.cs, input -> clearSources());
+		registerInputHandler(Inputs.v, input -> toggleVerbose());
 	}
 	
 	@Override
@@ -44,17 +47,54 @@ public class ContainerItemGetterBot extends Bot
 		{
 			waitOnPause();
 			
-			while(isActive() && sources.size() == 0) sleep(1000);
+			while(isActive() && (items.size() == 0 || sources.size() == 0))
+			{
+				if(verbose)
+					Utils.consolePrint(
+						"Bot waiting for items/sources (items empty? %s, sources empty? %s)",
+						items.size() == 0,
+						sources.size() == 0
+					);
+				
+				sleep(2500);
+			}
 			if(!isActive()) break;
 			
 			for(InventoryListComponent src: sources)
 			{
+				if(verbose)
+					Utils.consolePrint(
+						"Checking container %s for items to grab",
+						Utils.getRootItem(src).getBaseName()
+					);
+				
 				srcItems.clear();
 				for(String name: items)
 					srcItems.addAll(Utils.getInventoryItems(src, name));
 				
+				if(verbose)
+					Utils.consolePrint(
+						"=> %s",
+						srcItems
+							.stream()
+							.map(item -> item.getBaseName())
+							.collect(Collectors.groupingBy(x -> x, Collectors.counting()))
+							.entrySet()
+							.stream()
+							// backwards for desceneding count
+							.sorted((l, r) -> r.getValue().compareTo(l.getValue()))
+							.map(e -> String.format(
+								"%dx %s",
+								e.getValue(),
+								e.getKey()
+							))
+							.collect(Collectors.joining(", "))
+					);
+				
 				long[] ids = Utils.getItemIds(srcItems);
 				WurmHelper.hud.getWorld().getServerConnection().sendMoveSomeItems(playerInvID, ids);
+				if(verbose && ids.length > 0)
+					Utils.consolePrint("Requested move of %d items", ids.length);
 			}
 			
 			sleep(timeout);
@@ -108,21 +148,32 @@ public class ContainerItemGetterBot extends Bot
 			return;
 		}
 		
-		InventoryMetaItem root = Utils.getRootItem(listComponent);
-		if(root == null)
+		if(Utils.getRootItem(listComponent) == null)
 		{
 			Utils.consolePrint("ListComponent has no root item?");
 			return;
 		}
 		
 		sources.add(listComponent);
-		Utils.consolePrint("New target is \"%s\"", root.getBaseName());
+		Utils.consolePrint(
+			"New source containers are: %s",
+			sources
+				.stream()
+				.map(lc -> Utils.getRootItem(lc).getBaseName())
+				.collect(Collectors.joining(", "))
+		);
 	}
 	
 	void clearSources()
 	{
 		sources.clear();
-		Utils.consolePrint("List of sources cleared");
+		Utils.consolePrint("List of source containers cleared");
+	}
+	
+	void toggleVerbose()
+	{
+		verbose = !verbose;
+		Utils.consolePrint("Verbose logging is now %s", verbose ? "on" : "off");
 	}
 	
 	enum Inputs implements InputKey
@@ -130,7 +181,9 @@ public class ContainerItemGetterBot extends Bot
 		a("Add item to be pulled", "name"),
 		c("Clear list of items to pull", ""),
 		ss("Add source container to pull from", ""),
-		cs("Clear list of source containers", "");
+		cs("Clear list of source containers", ""),
+		v("Toggle verbose messages", ""),
+		;
 		
 		String description;
         String usage;
