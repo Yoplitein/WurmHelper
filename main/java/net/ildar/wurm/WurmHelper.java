@@ -1,7 +1,9 @@
 package net.ildar.wurm;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.CreatureData;
 import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.*;
 import com.wurmonline.client.util.Computer;
 import com.wurmonline.mesh.Tiles;
@@ -220,6 +222,42 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         Utils.consolePrint("Layer: " + hud.getWorld().getPlayerLayer());
     }
 
+    private void printCreatureInformation()
+    {
+        try
+        {
+            PickableUnit unit = ReflectionUtil.getPrivateField(
+                hud.getWorld(),
+                ReflectionUtil.getField(
+                    hud.getWorld().getClass(),
+                    "currentHoveredObject"
+                )
+            );
+            if(!(unit instanceof CreatureCellRenderable))
+            {
+                Utils.consolePrint("Not hovering over creature");
+                return;
+            }
+            CreatureCellRenderable creature = (CreatureCellRenderable)unit;
+            
+            Utils.consolePrint("Creature `%s`", creature.getHoverName());
+            Utils.consolePrint("    ID: %s", creature.getId());
+            Utils.consolePrint("    Pos: %s,%s (height %s)", creature.getXPos(), creature.getYPos(), creature.getHPos());
+            Utils.consolePrint("    Distance: %s", creature.getLengthFromPlayer());
+            Utils.consolePrint("    Layer: %s", creature.getLayer());
+            Utils.consolePrint("    Model: %s", creature.getModelName());
+            Utils.consolePrint("    Health: %s", creature.getPercentHealth());
+        }
+        catch(Exception err)
+        {
+            Utils.consolePrint(
+                "Got %s when trying to print creature info: %s",
+                err.getClass().getName(),
+                err.getMessage()
+            );
+        }
+    }
+    
     private void printItemInfo(InventoryMetaItem item) {
         if (item == null) {
             Utils.consolePrint("Null item");
@@ -398,6 +436,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             consoleCommandHandlers.put(ConsoleCommand.iteminfo, input -> printItemInformation());
             consoleCommandHandlers.put(ConsoleCommand.tileinfo, input -> printTileInformation());
             consoleCommandHandlers.put(ConsoleCommand.playerinfo, input -> printPlayerInformation());
+            consoleCommandHandlers.put(ConsoleCommand.creatureinfo, input -> printCreatureInformation());
         }
         String noBlessings = properties.getProperty("NoBlessings");
         if (noBlessings != null && noBlessings.equals("true"))
@@ -517,6 +556,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         iteminfo("", "Prints information about selected items under mouse cursor."),
         tileinfo("", "Prints information about tiles around player"),
         playerinfo("", "Prints some information about the player"),
+        creatureinfo("", "Prints information about the hovered creature"),
         actionlist("", "Show the list of available actions to use with \"action\" key"),
         action("abbreviation", "Use the appropritate tool from player's inventory with provided action abbreviation on the hovered object. " +
                 "See the list of available actions with \"" + actionlist.name() + "\" command"),
