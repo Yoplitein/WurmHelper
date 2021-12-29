@@ -2,6 +2,7 @@ package net.ildar.wurm.bot;
 
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -30,7 +31,7 @@ import net.ildar.wurm.annotations.BotInfo;
 import net.ildar.wurm.bot.MinerBot.Direction;
 
 @BotInfo(description = "Remotely control other clients", abbreviation = "rmi")
-public class RMIBot extends Bot implements BotRemote, Executor
+public class RMIBot extends Bot implements BotServer, BotClient, Executor
 {
 	final HeadsUpDisplay hud = WurmHelper.hud;
 	final World world = hud.getWorld();
@@ -43,7 +44,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	/*Concurrent?*/HashMap<Runnable, Long> scheduledTasks = new HashMap<>();
 	
 	// server fields
-	MultiRemote clients;
+	ClientSet clients;
 	Registry serverRegistry;
 	boolean syncPosition;
 	
@@ -225,6 +226,10 @@ public class RMIBot extends Bot implements BotRemote, Executor
 				serverRegistry.unbind(name);
 			
 			clients = null;
+			
+			serverRegistry.unbind("BotServer");
+			UnicastRemoteObject.unexportObject(this, true);
+			
 			UnicastRemoteObject.unexportObject(serverRegistry, true);
 			serverRegistry = null;
 			
@@ -237,7 +242,12 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			RMISocketFactory.getDefaultSocketFactory(),
 			port -> new ServerSocket(port, 16, InetAddress.getByName(registryHost))
 		);
-		clients = new MultiRemote();
+		
+		Remote stub = UnicastRemoteObject.exportObject(this, 0);
+		serverRegistry.bind("BotServer", stub);
+		
+		clients = new ClientSet();
+		
 		Utils.consolePrint("Server mode active, RMI registry running at %s:%d", registryHost, registryPort);
 	}
 	
@@ -255,6 +265,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 		{
 			clientRegistry.unbind(regName);
 			UnicastRemoteObject.unexportObject(this, true);
+			((BotServer)clientRegistry.lookup("BotServer")).onClientLeave(getPlayerName());
 			clientRegistry = null;
 			
 			Utils.consolePrint("Client mode disabled");
@@ -265,6 +276,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 		Remote stub = UnicastRemoteObject.exportObject(this, 0);
 		clientRegistry.bind(regName, stub);
 		Utils.consolePrint("Client mode enabled");
+		((BotServer)clientRegistry.lookup("BotServer")).onClientJoin(getPlayerName());
 	}
 	
 	void serverRefreshClients() throws Exception
@@ -453,6 +465,26 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			schedule(this::syncPositionTask, 100);
 	}
 	
+	@Override
+	public void onClientJoin(String name)
+	{
+		Utils.consolePrint("Got new client: %s", name);
+		printExceptions(
+			() -> clients.refreshRemotes(serverRegistry),
+			"Got %s when registering that client: %s"
+		);
+	}
+	
+	@Override
+	public void onClientLeave(String name)
+	{
+		Utils.consolePrint("Client `%s` disconnected", name);
+		printExceptions(
+			() -> clients.refreshRemotes(serverRegistry),
+			"Got %s when unregistering that client: %s"
+		);
+	}
+	
 	long findTool(String name)
 	{
 		List<InventoryMetaItem> items = Utils.getInventoryItems(name);
@@ -477,7 +509,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	}
 
 	@Override
-	public void setPosAndHeading(float x, float y, float rx, float ry)
+	public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
 	{
 		execute(() -> {
 			Utils.movePlayer(x, y);
@@ -542,7 +574,13 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	}
 }
 
-interface BotRemote extends Remote
+interface BotServer extends Remote
+{
+	void onClientJoin(String name) throws RemoteException;
+	void onClientLeave(String name) throws RemoteException;
+}
+
+interface BotClient extends Remote
 {
 	String getPlayerName() throws RemoteException;
 	
@@ -554,9 +592,10 @@ interface BotRemote extends Remote
 	void mine(long tileID, MinerBot.Direction direction) throws RemoteException;
 }
 
-final class MultiRemote implements BotRemote
+
+final class ClientSet implements BotClient
 {
-	ArrayList<BotRemote> remotes = new ArrayList<>();
+	ArrayList<BotClient> remotes = new ArrayList<>();
 	
 	public void refreshRemotes(Registry registry) throws Exception
 	{
@@ -567,7 +606,7 @@ final class MultiRemote implements BotRemote
 		{
 			if(!name.startsWith(RMIBot.registryPrefix))
 				continue;
-			remotes.add((BotRemote)registry.lookup(name));
+			remotes.add((BotClient)registry.lookup(name));
 		}
 	}
 	
@@ -577,7 +616,7 @@ final class MultiRemote implements BotRemote
 		String[] names = new String[remotes.size()];
 		
 		int index = 0;
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			names[index++] = remote.getPlayerName();
 		
 		return String.join(", ", names);
@@ -586,42 +625,42 @@ final class MultiRemote implements BotRemote
 	@Override
 	public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.setPosAndHeading(x, y, rx, ry);
 	}
 	
 	@Override
 	public void embark(long vehicleID) throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.embark(vehicleID);
 	}
 	
 	@Override
 	public void disembark() throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.disembark();
 	}
 	
 	@Override
 	public void attack(long creatureID) throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.attack(creatureID);
 	}
 	
 	@Override
 	public void dig() throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.dig();
 	}
 	
 	@Override
 	public void mine(long tileID, Direction direction) throws RemoteException
 	{
-		for(BotRemote remote: remotes)
+		for(BotClient remote: remotes)
 			remote.mine(tileID, direction);
 	}
 }
