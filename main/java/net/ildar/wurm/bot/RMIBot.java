@@ -11,14 +11,17 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
 
 import com.wurmonline.client.game.World;
+import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
+import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
 
 import net.ildar.wurm.Utils;
@@ -46,6 +49,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	
 	// client fields
 	Registry clientRegistry;
+	long shovelID = -10;
 	
 	boolean isServer()
 	{
@@ -353,6 +357,12 @@ public class RMIBot extends Bot implements BotRemote, Executor
 				clients.disembark();
 				break;
 			}
+			case "dig":
+			{
+				dig();
+				clients.dig();
+				break;
+			}
 			default:
 				Utils.consolePrint("Unknown subcommand `%s`", args[0]);
 		}
@@ -443,6 +453,23 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			schedule(this::syncPositionTask, 100);
 	}
 	
+	long findTool(String name)
+	{
+		List<InventoryMetaItem> items = Utils.getInventoryItems(name);
+		if(items.size() == 0)
+			return -10;
+		
+		InventoryMetaItem item = items.get(0);
+		if(items.size() > 1)
+			Utils.consolePrint(
+				"Warning: search for tool `%s` matched several, using the `%s`",
+				name,
+				item.getBaseName()
+			);
+		
+		return items.get(0).getId();
+	}
+	
 	@Override
 	public String getPlayerName()
 	{
@@ -485,7 +512,27 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			Utils.consolePrint("Attacking creature %s", creatureID);
 		});
 	}
-
+	
+	@Override
+	public void dig() throws RemoteException
+	{
+		if(shovelID == -10)
+		{
+			shovelID = findTool("shovel");
+			
+			if(shovelID == -10)
+			{
+				Utils.consolePrint("Warning: couldn't find a shovel to dig with");
+				return;
+			}
+		}
+		
+		final int tx = Math.round(WurmHelper.hud.getWorld().getPlayerPosX() / 4);
+		final int ty = Math.round(WurmHelper.hud.getWorld().getPlayerPosY() / 4);
+		final long tileID = Tiles.getTileId(tx, ty, 0);
+		world.getServerConnection().sendAction(shovelID, new long[]{tileID}, PlayerAction.DIG);
+	}
+	
 	@Override
 	public void mine(long tileID, Direction direction)
 	{
@@ -503,6 +550,7 @@ interface BotRemote extends Remote
 	void embark(long vehicleID) throws RemoteException;
 	void disembark(/* tile ID? */) throws RemoteException;
 	void attack(long creatureID) throws RemoteException;
+	void dig() throws RemoteException;
 	void mine(long tileID, MinerBot.Direction direction) throws RemoteException;
 }
 
@@ -562,7 +610,14 @@ final class MultiRemote implements BotRemote
 		for(BotRemote remote: remotes)
 			remote.attack(creatureID);
 	}
-
+	
+	@Override
+	public void dig() throws RemoteException
+	{
+		for(BotRemote remote: remotes)
+			remote.dig();
+	}
+	
 	@Override
 	public void mine(long tileID, Direction direction) throws RemoteException
 	{
