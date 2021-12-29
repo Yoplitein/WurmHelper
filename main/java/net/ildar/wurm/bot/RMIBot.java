@@ -381,21 +381,31 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 			{
 				final String strDir = args.length >= 2 ? args[1].toLowerCase() : "f";
 				final Direction direction = Direction.getByAbbreviation(strDir);
+				final boolean targetingVertical = strDir.equalsIgnoreCase("v");
 				
-				if(direction == Direction.UNKNOWN)
+				if(direction == Direction.UNKNOWN && !targetingVertical)
 				{
-					Utils.consolePrint("Unkown mining direction `%s` (expecting f/u/d)", args[1]);
+					Utils.consolePrint("Unkown mining direction `%s` (expecting f/u/d/v)", args[1]);
 					return;
 				}
 				
 				PickableUnit unit = world.getCurrentHoveredObject();
-				if(
-					unit == null ||
-					!(unit instanceof CaveWallPicker) ||
-					((CaveWallPicker)unit).getWallId() < 2 // wall ids 0,1 indicate floor/ceiling
-				)
+				if(unit == null || !(unit instanceof CaveWallPicker))
 				{
-					Utils.consolePrint("Not hovering over cave wall");
+					Utils.consolePrint("Not hovering over any cave tile");
+					return;
+				}
+				
+				// vertical mining has its own "direction" to guard against wayward mining actions mucking up e.g. smooth floors
+				final boolean targetedVertical = ((CaveWallPicker)unit).getWallId() < 2; // ids 0,1 are floor/ceiling
+				if(targetingVertical != targetedVertical)
+				{
+					Utils.consolePrint(
+						"Direction mismatch: direction is %s but hovering over %s%s",
+						targetingVertical ? "floor/ceiling" : "walls",
+						targetedVertical ? "floor/ceiling" : "a wall",
+						targetedVertical ? " (did you mean to use `v` as the direction?)" : ""
+					);
 					return;
 				}
 				
