@@ -2,7 +2,6 @@ package net.ildar.wurm.bot;
 
 import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -20,6 +19,8 @@ import java.util.concurrent.Executor;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.cave.CaveWallPicker;
+import com.wurmonline.client.renderer.cell.CellRenderable;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.mesh.Tiles;
@@ -51,6 +52,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 	// client fields
 	Registry clientRegistry;
 	long shovelID = -10;
+	long pickaxeID = -10;
 	
 	boolean isServer()
 	{
@@ -375,6 +377,33 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 				clients.dig();
 				break;
 			}
+			case "mine":
+			{
+				final String strDir = args.length >= 2 ? args[1].toLowerCase() : "f";
+				final Direction direction = Direction.getByAbbreviation(strDir);
+				
+				if(direction == Direction.UNKNOWN)
+				{
+					Utils.consolePrint("Unkown mining direction `%s` (expecting f/u/d)", args[1]);
+					return;
+				}
+				
+				PickableUnit unit = world.getCurrentHoveredObject();
+				if(
+					unit == null ||
+					!(unit instanceof CaveWallPicker) ||
+					((CaveWallPicker)unit).getWallId() < 2 // wall ids 0,1 indicate floor/ceiling
+				)
+				{
+					Utils.consolePrint("Not hovering over cave wall");
+					return;
+				}
+				
+				final long wallID = unit.getId();
+				mine(wallID, direction);
+				clients.mine(wallID, direction);
+				break;
+			}
 			default:
 				Utils.consolePrint("Unknown subcommand `%s`", args[0]);
 		}
@@ -566,10 +595,25 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 	}
 	
 	@Override
-	public void mine(long tileID, Direction direction)
+	public void mine(long wallID, Direction direction)
 	{
 		execute(() -> {
-			// TODO
+			if(pickaxeID == -10)
+			{
+				pickaxeID = findTool("pickaxe");
+				
+				if(pickaxeID == -10)
+				{
+					Utils.consolePrint("Warning: couldn't find a pickaxe to mine with");
+					return;
+				}
+			}
+			
+			world.getServerConnection().sendAction(
+				pickaxeID,
+				new long[]{wallID},
+				direction.action
+			);
 		});
 	}
 }
@@ -589,7 +633,7 @@ interface BotClient extends Remote
 	void disembark(/* tile ID? */) throws RemoteException;
 	void attack(long creatureID) throws RemoteException;
 	void dig() throws RemoteException;
-	void mine(long tileID, MinerBot.Direction direction) throws RemoteException;
+	void mine(long wallID, MinerBot.Direction direction) throws RemoteException;
 }
 
 
@@ -658,10 +702,10 @@ final class ClientSet implements BotClient
 	}
 	
 	@Override
-	public void mine(long tileID, Direction direction) throws RemoteException
+	public void mine(long wallID, Direction direction) throws RemoteException
 	{
 		for(BotClient remote: remotes)
-			remote.mine(tileID, direction);
+			remote.mine(wallID, direction);
 	}
 }
 
