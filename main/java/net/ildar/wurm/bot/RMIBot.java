@@ -312,41 +312,41 @@ public class RMIBot extends Bot implements BotRemote, Executor
 		switch(args[0].toLowerCase())
 		{
 			case "attack":
-				final String src = args.length >= 2 ? args[1] : "target";
-				if(src.equalsIgnoreCase("target"))
+				final String attackSrc = args.length >= 2 ? args[1] : "hover";
+				switch(attackSrc)
 				{
-					TargetWindow targetWin = ReflectionUtil.getPrivateField(
-						hud, 
-						ReflectionUtil.getField(
-							hud.getClass(),
-							"targetWindow"
-						)
-					);
-					CreatureCellRenderable targetCreature = ReflectionUtil.getPrivateField(
-						targetWin,
-						ReflectionUtil.getField(
-							targetWin.getClass(),
-							"creature"
-						)
-					);
-					
-					clients.attack(targetCreature.getId());
-				}
-				else if(src.equalsIgnoreCase("hover"))
-				{
-					PickableUnit unit = world.getCurrentHoveredObject();
-					if(unit == null || !(unit instanceof CreatureCellRenderable))
-					{
-						Utils.consolePrint("Not hovering over creature");
+					case "target":
+						TargetWindow targetWin = ReflectionUtil.getPrivateField(
+							hud,
+							ReflectionUtil.getField(
+								hud.getClass(),
+								"targetWindow"
+							)
+						);
+						CreatureCellRenderable targetCreature = ReflectionUtil.getPrivateField(
+							targetWin,
+							ReflectionUtil.getField(
+								targetWin.getClass(),
+								"creature"
+							)
+						);
+						
+						clients.attack(targetCreature.getId());
 						break;
-					}
-					
-					attack(unit.getId());
-					clients.attack(unit.getId());
+					case "hover":
+						PickableUnit unit = world.getCurrentHoveredObject();
+						if(unit == null || !(unit instanceof CreatureCellRenderable))
+						{
+							Utils.consolePrint("Not hovering over creature");
+							break;
+						}
+						
+						attack(unit.getId());
+						clients.attack(unit.getId());
+						break;
+					default:
+						Utils.consolePrint("Usage: %s attack [hover|target]", Inputs.sr.getName());
 				}
-				else
-					Utils.consolePrint("Usage: %s attack <target|hover>", Inputs.sr.getName());
-				
 				break;
 			case "syncpos":
 				syncPosition = !syncPosition;
@@ -357,6 +357,33 @@ public class RMIBot extends Bot implements BotRemote, Executor
 					"Position synchronization %s",
 					syncPosition ? "on" : "off"
 				);
+				break;
+			case "embark":
+				final String embarkSrc = args.length >= 2 ? args[1] : "hover";
+				switch(embarkSrc)
+				{
+					case "riding":
+						// TODO
+						break;
+					case "hover":
+						PickableUnit unit = world.getCurrentHoveredObject();
+						if(unit == null || !(unit instanceof CreatureCellRenderable))
+						{
+							Utils.consolePrint("Not hovering over vehicle");
+							break;
+						}
+						
+						long id = unit.getId();
+						WurmHelper.hud.sendAction(PlayerAction.EMBARK_DRIVER, id);
+						clients.embark(id);
+						break;
+					default:
+						Utils.consolePrint("Usage: %s embark [riding|hover]");
+				}
+				break;
+			case "disembark":
+				disembark();
+				clients.disembark();
 				break;
 			default:
 				Utils.consolePrint("Unknown subcommand `%s`", args[0]);
@@ -464,17 +491,31 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			Utils.turnPlayer(rx, ry);
 		});
 	}
+	
+	@Override
+	public void embark(long vehicleID) throws RemoteException
+	{
+		WurmHelper.hud.sendAction(PlayerAction.EMBARK_PASSENGER, vehicleID);
+	}
+	
+	@Override
+	public void disembark() throws RemoteException
+	{
+		CreatureCellRenderable vehicle = WurmHelper.hud.getWorld().getPlayer().getCarrierCreature();
+		if(vehicle == null)
+		{
+			Utils.consolePrint("Got disembark request but not riding anything");
+			return;
+		}
+		
+		WurmHelper.hud.sendAction(PlayerAction.DISEMBARK, vehicle.getId());
+	}
 
 	@Override
 	public void attack(long creatureID)
 	{
 		execute(() -> {
-			WurmHelper
-				.hud
-				.getWorld()
-				.getServerConnection()
-				.sendAction(-10, new long[]{creatureID}, PlayerAction.TARGET)
-			;
+			WurmHelper.hud.sendAction(PlayerAction.TARGET, creatureID);
 			Utils.consolePrint("Attacking creature %s", creatureID);
 		});
 	}
@@ -493,6 +534,8 @@ interface BotRemote extends Remote
 	String getPlayerName() throws RemoteException;
 	
 	void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException;
+	void embark(long vehicleID) throws RemoteException;
+	void disembark(/* tile ID? */) throws RemoteException;
 	void attack(long creatureID) throws RemoteException;
 	void mine(long tileID, MinerBot.Direction direction) throws RemoteException;
 }
@@ -532,7 +575,21 @@ final class MultiRemote implements BotRemote
 		for(BotRemote remote: remotes)
 			remote.setPosAndHeading(x, y, rx, ry);
 	}
-
+	
+	@Override
+	public void embark(long vehicleID) throws RemoteException
+	{
+		for(BotRemote remote: remotes)
+			remote.embark(vehicleID);
+	}
+	
+	@Override
+	public void disembark() throws RemoteException
+	{
+		for(BotRemote remote: remotes)
+			remote.disembark();
+	}
+	
 	@Override
 	public void attack(long creatureID) throws RemoteException
 	{
