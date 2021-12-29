@@ -19,10 +19,7 @@ import com.wurmonline.client.game.World;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
-import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.shared.constants.PlayerAction;
-
-import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
@@ -32,6 +29,9 @@ import net.ildar.wurm.bot.MinerBot.Direction;
 @BotInfo(description = "Remotely control other clients", abbreviation = "rmi")
 public class RMIBot extends Bot implements BotRemote, Executor
 {
+	final HeadsUpDisplay hud = WurmHelper.hud;
+	final World world = hud.getWorld();
+	
 	static final String registryPrefix = "RMIBot";
 	String registryHost = "127.0.43.7";
 	int registryPort = 0x2B07;
@@ -306,49 +306,23 @@ public class RMIBot extends Bot implements BotRemote, Executor
 			return;
 		}
 		
-		
-		final HeadsUpDisplay hud = WurmHelper.hud;
-		final World world = hud.getWorld();
 		switch(args[0].toLowerCase())
 		{
 			case "attack":
-				final String attackSrc = args.length >= 2 ? args[1] : "hover";
-				switch(attackSrc)
+			{
+				PickableUnit unit = world.getCurrentHoveredObject();
+				if(unit == null || !(unit instanceof CreatureCellRenderable))
 				{
-					case "target":
-						TargetWindow targetWin = ReflectionUtil.getPrivateField(
-							hud,
-							ReflectionUtil.getField(
-								hud.getClass(),
-								"targetWindow"
-							)
-						);
-						CreatureCellRenderable targetCreature = ReflectionUtil.getPrivateField(
-							targetWin,
-							ReflectionUtil.getField(
-								targetWin.getClass(),
-								"creature"
-							)
-						);
-						
-						clients.attack(targetCreature.getId());
-						break;
-					case "hover":
-						PickableUnit unit = world.getCurrentHoveredObject();
-						if(unit == null || !(unit instanceof CreatureCellRenderable))
-						{
-							Utils.consolePrint("Not hovering over creature");
-							break;
-						}
-						
-						attack(unit.getId());
-						clients.attack(unit.getId());
-						break;
-					default:
-						Utils.consolePrint("Usage: %s attack [hover|target]", Inputs.sr.getName());
+					Utils.consolePrint("Not hovering over creature");
+					break;
 				}
+				
+				attack(unit.getId());
+				clients.attack(unit.getId());
 				break;
+			}
 			case "syncpos":
+			{
 				syncPosition = !syncPosition;
 				if(syncPosition)
 					execute(this::syncPositionTask);
@@ -358,33 +332,27 @@ public class RMIBot extends Bot implements BotRemote, Executor
 					syncPosition ? "on" : "off"
 				);
 				break;
+			}
 			case "embark":
-				final String embarkSrc = args.length >= 2 ? args[1] : "hover";
-				switch(embarkSrc)
+			{
+				PickableUnit unit = world.getCurrentHoveredObject();
+				if(unit == null || !(unit instanceof CreatureCellRenderable))
 				{
-					case "riding":
-						// TODO
-						break;
-					case "hover":
-						PickableUnit unit = world.getCurrentHoveredObject();
-						if(unit == null || !(unit instanceof CreatureCellRenderable))
-						{
-							Utils.consolePrint("Not hovering over vehicle");
-							break;
-						}
-						
-						long id = unit.getId();
-						WurmHelper.hud.sendAction(PlayerAction.EMBARK_DRIVER, id);
-						clients.embark(id);
-						break;
-					default:
-						Utils.consolePrint("Usage: %s embark [riding|hover]");
+					Utils.consolePrint("Not hovering over vehicle");
+					break;
 				}
+				
+				long id = unit.getId();
+				hud.sendAction(PlayerAction.EMBARK_DRIVER, id);
+				clients.embark(id);
 				break;
+			}
 			case "disembark":
+			{
 				disembark();
 				clients.disembark();
 				break;
+			}
 			default:
 				Utils.consolePrint("Unknown subcommand `%s`", args[0]);
 		}
@@ -462,12 +430,10 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	
 	void syncPositionTask()
 	{
-		World world = WurmHelper.hud.getWorld();
 		final float px = world.getPlayerPosX();
 		final float py = world.getPlayerPosY();
 		final float rx = world.getPlayerRotX();
 		final float ry = world.getPlayerRotY();
-		
 		printExceptions(
 			() -> clients.setPosAndHeading(px, py, rx, ry),
 			"Got %s when setting clients' position: %s"
@@ -480,7 +446,7 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	@Override
 	public String getPlayerName()
 	{
-		return WurmHelper.hud.getWorld().getPlayer().getPlayerName();
+		return world.getPlayer().getPlayerName();
 	}
 
 	@Override
@@ -495,27 +461,27 @@ public class RMIBot extends Bot implements BotRemote, Executor
 	@Override
 	public void embark(long vehicleID) throws RemoteException
 	{
-		WurmHelper.hud.sendAction(PlayerAction.EMBARK_PASSENGER, vehicleID);
+		hud.sendAction(PlayerAction.EMBARK_PASSENGER, vehicleID);
 	}
 	
 	@Override
 	public void disembark() throws RemoteException
 	{
-		CreatureCellRenderable vehicle = WurmHelper.hud.getWorld().getPlayer().getCarrierCreature();
+		CreatureCellRenderable vehicle = world.getPlayer().getCarrierCreature();
 		if(vehicle == null)
 		{
 			Utils.consolePrint("Got disembark request but not riding anything");
 			return;
 		}
 		
-		WurmHelper.hud.sendAction(PlayerAction.DISEMBARK, vehicle.getId());
+		hud.sendAction(PlayerAction.DISEMBARK, vehicle.getId());
 	}
 
 	@Override
 	public void attack(long creatureID)
 	{
 		execute(() -> {
-			WurmHelper.hud.sendAction(PlayerAction.TARGET, creatureID);
+			hud.sendAction(PlayerAction.TARGET, creatureID);
 			Utils.consolePrint("Attacking creature %s", creatureID);
 		});
 	}
