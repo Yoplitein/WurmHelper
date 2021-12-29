@@ -26,6 +26,7 @@ import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
 
+import net.ildar.wurm.BotController;
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
 import net.ildar.wurm.annotations.BotInfo;
@@ -326,6 +327,38 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 		
 		switch(args[0].toLowerCase())
 		{
+			case "help":
+			{
+				final String botKeyword = BotController.getInstance().getBotRegistration(this.getClass()).getAbbreviation();
+				final String cmdKeyword = Inputs.sr.getName();
+				
+				Utils.consolePrint(
+					"bot %s %s attack -- clients (+ master) target hovered creature",
+					botKeyword, cmdKeyword
+				);
+				Utils.consolePrint(
+					"bot %s %s syncpos -- clients have position and heading continuously synced with master",
+					botKeyword, cmdKeyword
+				);
+				Utils.consolePrint(
+					"bot %s %s embark -- clients (+ master as driver) embark onto hovered vehicle",
+					botKeyword, cmdKeyword
+				);
+				Utils.consolePrint(
+					"bot %s %s disembark -- clients (+ master) disembark their current vehicle",
+					botKeyword, cmdKeyword
+				);
+				Utils.consolePrint(
+					"bot %s %s dig -- clients shovel up resources",
+					botKeyword, cmdKeyword
+				);
+				Utils.consolePrint(
+					"bot %s %s mine <f/u/d/v> -- clients mine walls in specified direction " +
+					"(as in MinerBot, or floor/ceiling with `v`)",
+					botKeyword, cmdKeyword
+				);
+				break;
+			}
 			case "attack":
 			{
 				PickableUnit unit = world.getCurrentHoveredObject();
