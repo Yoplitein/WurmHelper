@@ -199,7 +199,7 @@ public class ImproverBot extends Bot {
                 // wait for improve completion
                 if (improveInitiated) {
                     int counter = 0;
-                    while (!improveActionFinished && counter++ < 50) {
+                    while (!improveActionFinished && counter++ < 10) {
                         sleep(200);
                     }
                     if (!improveActionFinished)
