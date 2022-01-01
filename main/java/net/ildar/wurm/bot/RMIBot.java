@@ -19,8 +19,8 @@ import java.util.concurrent.Executor;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cave.CaveWallPicker;
-import com.wurmonline.client.renderer.cell.CellRenderable;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.mesh.Tiles;
@@ -410,6 +410,21 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 				clients.dig();
 				break;
 			}
+			case "level":
+			{
+				PickableUnit unit = world.getCurrentHoveredObject();
+				if(unit == null || !(unit instanceof TilePicker))
+				{
+					Utils.consolePrint("Not hovering over any tile");
+					return;
+				}
+				
+				final long tileID = unit.getId();
+				level(tileID);
+				clients.level(tileID);
+				
+				break;
+			}
 			case "mine":
 			{
 				final String strDir = args.length >= 2 ? args[1].toLowerCase() : "f";
@@ -638,6 +653,23 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
 	}
 	
 	@Override
+	public void level(long tileID) throws RemoteException
+	{
+		if(shovelID == -10)
+		{
+			shovelID = findTool("shovel");
+			
+			if(shovelID == -10)
+			{
+				Utils.consolePrint("Warning: couldn't find a shovel to dig with");
+				return;
+			}
+		}
+		
+		world.getServerConnection().sendAction(shovelID, new long[]{tileID}, PlayerAction.LEVEL);
+	}
+	
+	@Override
 	public void mine(long wallID, Direction direction)
 	{
 		execute(() -> {
@@ -676,6 +708,7 @@ interface BotClient extends Remote
 	void disembark(/* tile ID? */) throws RemoteException;
 	void attack(long creatureID) throws RemoteException;
 	void dig() throws RemoteException;
+	void level(long tileID) throws RemoteException;
 	void mine(long wallID, MinerBot.Direction direction) throws RemoteException;
 }
 
@@ -742,6 +775,13 @@ final class ClientSet implements BotClient
 	{
 		for(BotClient remote: remotes)
 			remote.dig();
+	}
+	
+	@Override
+	public void level(long tileID) throws RemoteException
+	{
+		for(BotClient remote: remotes)
+			remote.level(tileID);
 	}
 	
 	@Override
