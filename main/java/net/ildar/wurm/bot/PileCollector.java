@@ -34,6 +34,9 @@ public class PileCollector extends Bot {
     private int containerCapacity = 300;
     private String targetItemName = "dirt";
     private float minQuality = 0;
+    
+    // items picked up from ground that failed predicates and were dropped back to ground
+    private Set<Long> ignoredItems = new HashSet<>();
 
     public PileCollector() {
         registerInputHandler(PileCollector.InputKey.stn, this::setTargetName);
@@ -46,6 +49,7 @@ public class PileCollector extends Bot {
     protected void work() throws Exception {
         setTimeout(500);
         ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
+        Set<Long> pickedUpItems = new HashSet<>();
         while (isActive()) {
             waitOnPause();
             Map<Long, GroundItemCellRenderable> groundItemsMap = ReflectionUtil.getPrivateField(sscc,
@@ -60,11 +64,17 @@ public class PileCollector extends Bot {
                                 ReflectionUtil.getField(groundItem.getClass(), "item"));
                         float itemX = groundItemData.getX();
                         float itemY = groundItemData.getY();
+                        long itemID = groundItemData.getId();
                         if ((Math.sqrt(Math.pow(itemX - x, 2) + Math.pow(itemY - y, 2)) <= MAX_DISTANCE)) {
-                            if (groundItemData.getName().toLowerCase().contains("pile of ") && !openedPiles.contains(groundItemData.getId()))
-                                WurmHelper.hud.sendAction(PlayerAction.OPEN, groundItemData.getId());
-                            else if (groundItemData.getName().contains(targetItemName))
-                                WurmHelper.hud.sendAction(PlayerAction.TAKE, groundItemData.getId());
+                            if (groundItemData.getName().toLowerCase().contains("pile of ") && !openedPiles.contains(itemID))
+                                WurmHelper.hud.sendAction(PlayerAction.OPEN, itemID);
+                            else if (groundItemData.getName().contains(targetItemName) && !ignoredItems.contains(itemID)) {
+                                // we can't get quality of items on the ground (not synced with client)
+                                // so they have to be temporarily moved into player inventory
+                                // (not sure why this was also done previously, moving ground items directly works?)
+                                WurmHelper.hud.sendAction(PlayerAction.TAKE, itemID);
+                                pickedUpItems.add(itemID);
+                            }
                         }
                     }
                 } catch (ConcurrentModificationException ignored) {}
@@ -91,15 +101,32 @@ public class PileCollector extends Bot {
                         targetItems = Utils.getInventoryItems(targetItemName);
                     }
                     
-                    moveToContainers(targetItems
+                    Map<Boolean, List<InventoryMetaItem>> splitItems = targetItems
                         .stream()
-                        .filter(item ->
+                        .collect(Collectors.partitioningBy(item ->
                             item.getBaseName().equals(targetItemName) &&
                             item.getRarity() == 0 &&
                             item.getQuality() >= minQuality
-                        )
-                        .collect(Collectors.toList())
-                    );
+                        ))
+                    ;
+                    moveToContainers(splitItems.get(true));
+                    
+                    if (!isContainerWindow)
+                        for (InventoryMetaItem item: splitItems.get(false)) {
+                            final long itemID = item.getId();
+                            if (!pickedUpItems.contains(itemID))
+                                continue;
+                            
+                            pickedUpItems.remove(itemID);
+                            ignoredItems.add(itemID);
+                            WurmHelper.hud.sendAction(
+                                item.getBaseName().matches("dirt|heap of sand") ?
+                                    PlayerAction.DROP_AS_PILE :
+                                    PlayerAction.DROP
+                                ,
+                                itemID
+                            );
+                        }
                 }
             }
             sleep(timeout);
@@ -145,6 +172,7 @@ public class PileCollector extends Bot {
         }
         this.targetItemName = targetName.toString();
         Utils.consolePrint("New name for target items is \"" + this.targetItemName + "\"");
+        ignoredItems.clear(); // items that didn't match previously may match now
     }
 
     private void setTargetInventoryName(String []input) {
@@ -199,6 +227,7 @@ public class PileCollector extends Bot {
                     minQuality * 100
                 );
             Utils.consolePrint("Items with QL >= %.1f will be collected", minQuality);
+            ignoredItems.clear(); // items that didn't match previously may match now
         } catch (NumberFormatException err) {
             Utils.consolePrint("`%s` is not a positive real number", input[0]);
         }
