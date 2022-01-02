@@ -431,18 +431,18 @@ public class ForesterBot extends Bot {
     private void addTreeWhitelist(String[] args)
     {
         if(args.length == 0)
-		{
-			printInputKeyUsageString(InputKey.atw);
-			return;
-		}
-		
-		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
-		for(String name: treeNames)
-			treeWhitelist.add(name);
+        {
+            printInputKeyUsageString(InputKey.atw);
+            return;
+        }
+        
+        String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+        for(String name: treeNames)
+            treeWhitelist.add(name);
         
         Utils.consolePrint(
             "Bot will only work on trees of type: %s",
-			String.join(", ", treeWhitelist)
+            String.join(", ", treeWhitelist)
         );
     }
     
@@ -455,18 +455,18 @@ public class ForesterBot extends Bot {
     private void addTreeBlacklist(String[] args)
     {
         if(args.length == 0)
-		{
-			printInputKeyUsageString(InputKey.atb);
-			return;
-		}
-		
-		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
-		for(String name: treeNames)
-			treeBlacklist.add(name);
+        {
+            printInputKeyUsageString(InputKey.atb);
+            return;
+        }
+        
+        String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+        for(String name: treeNames)
+            treeBlacklist.add(name);
         
         Utils.consolePrint(
             "Bot will skip working on tree types: %s",
-			String.join(", ", treeBlacklist)
+            String.join(", ", treeBlacklist)
         );
     }
     
@@ -479,18 +479,18 @@ public class ForesterBot extends Bot {
     private void addSproutBlacklist(String[] args)
     {
         if(args.length == 0)
-		{
-			printInputKeyUsageString(InputKey.asb);
-			return;
-		}
-		
-		String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
-		for(String name: treeNames)
-			sproutBlacklist.add(name);
+        {
+            printInputKeyUsageString(InputKey.asb);
+            return;
+        }
+        
+        String[] treeNames = String.join(" ", args).split("\\s*,\\s*");
+        for(String name: treeNames)
+            sproutBlacklist.add(name);
         
         Utils.consolePrint(
             "Bot will skip picking sprouts from tree types: %s",
-			String.join(", ", sproutBlacklist)
+            String.join(", ", sproutBlacklist)
         );
     }
     
