@@ -1,20 +1,27 @@
 package net.ildar.wurm.bot;
 
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import com.wurmonline.client.comm.ServerConnectionListenerClass;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.InventoryListComponent;
+import com.wurmonline.client.renderer.gui.InventoryWindow;
 import com.wurmonline.client.renderer.gui.ItemListWindow;
 import com.wurmonline.client.renderer.gui.WurmComponent;
 import com.wurmonline.shared.constants.PlayerAction;
-import net.ildar.wurm.WurmHelper;
-import net.ildar.wurm.Utils;
-import net.ildar.wurm.annotations.BotInfo;
+
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import net.ildar.wurm.Utils;
+import net.ildar.wurm.WurmHelper;
+import net.ildar.wurm.annotations.BotInfo;
 
 @BotInfo(description =
         "Collects piles of items to bulk containers. Default name for target items is \"dirt\"",
@@ -58,23 +65,39 @@ public class PileCollector extends Bot {
                                 WurmHelper.hud.sendAction(PlayerAction.TAKE, groundItemData.getId());
 
                         }
-
                     }
                 } catch (ConcurrentModificationException ignored) {}
                 for(WurmComponent wurmComponent : WurmHelper.getInstance().components) {
-                    if (wurmComponent instanceof ItemListWindow) {
+                    final boolean isContainerWindow = wurmComponent instanceof ItemListWindow;
+                    if (!(isContainerWindow || wurmComponent instanceof InventoryWindow))
+                        continue;
+                    
+                    List<InventoryMetaItem> targetItems;
+                    if (isContainerWindow) {
                         InventoryListComponent ilc = ReflectionUtil.getPrivateField(wurmComponent,
                                 ReflectionUtil.getField(wurmComponent.getClass(), "component"));
-                        if (ilc == null) continue;
+                        if (ilc == null)
+                            continue;
+                            
                         InventoryMetaItem rootItem = Utils.getRootItem(ilc);
-                        if (rootItem == null || !rootItem.getBaseName().toLowerCase().contains("pile of")) continue;
+                        if (rootItem == null || (isContainerWindow && !rootItem.getBaseName().toLowerCase().contains("pile of")))
+                            continue;
+                        
                         openedPiles.add(rootItem.getId());
-                        List<InventoryMetaItem> targetItems = Utils.getInventoryItems(ilc, targetItemName);
-                        moveToContainers(targetItems);
+                        targetItems = Utils.getInventoryItems(ilc, targetItemName);
+                    } else {
+                        targetItems = Utils.getInventoryItems(targetItemName);
                     }
+                    
+                    moveToContainers(targetItems
+                        .stream()
+                        .filter(item ->
+                            item.getBaseName().equals(targetItemName) &&
+                            item.getRarity() == 0
+                        )
+                        .collect(Collectors.toList())
+                    );
                 }
-                List<InventoryMetaItem> targetItems = Utils.getInventoryItems(targetItemName).stream().filter(item -> item.getBaseName().equals(targetItemName) && item.getRarity() == 0).collect(Collectors.toList());
-                moveToContainers(targetItems);
             }
             sleep(timeout);
         }
