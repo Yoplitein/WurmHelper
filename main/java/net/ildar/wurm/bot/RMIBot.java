@@ -353,7 +353,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s mine <f/u/d/v> -- clients mine walls in specified direction " +
+                    "bot %s %s level -- clients level out hovered tile",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s mine <f/u/d/v> -- clients mine hovered wall in specified direction " +
                     "(as in MinerBot, or floor/ceiling with `v`)",
                     botKeyword, cmdKeyword
                 );
