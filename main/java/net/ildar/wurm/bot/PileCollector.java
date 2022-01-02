@@ -33,11 +33,13 @@ public class PileCollector extends Bot {
     private String containerName = "large crate";
     private int containerCapacity = 300;
     private String targetItemName = "dirt";
+    private float minQuality = 0;
 
     public PileCollector() {
         registerInputHandler(PileCollector.InputKey.stn, this::setTargetName);
         registerInputHandler(PileCollector.InputKey.st, this::setTargetInventoryName);
         registerInputHandler(PileCollector.InputKey.stcc, this::setContainerCapacity);
+        registerInputHandler(PileCollector.InputKey.mq, this::setMinQuality);
     }
 
     @Override
@@ -63,10 +65,10 @@ public class PileCollector extends Bot {
                                 WurmHelper.hud.sendAction(PlayerAction.OPEN, groundItemData.getId());
                             else if (groundItemData.getName().contains(targetItemName))
                                 WurmHelper.hud.sendAction(PlayerAction.TAKE, groundItemData.getId());
-
                         }
                     }
                 } catch (ConcurrentModificationException ignored) {}
+                
                 for(WurmComponent wurmComponent : WurmHelper.getInstance().components) {
                     final boolean isContainerWindow = wurmComponent instanceof ItemListWindow;
                     if (!(isContainerWindow || wurmComponent instanceof InventoryWindow))
@@ -93,7 +95,8 @@ public class PileCollector extends Bot {
                         .stream()
                         .filter(item ->
                             item.getBaseName().equals(targetItemName) &&
-                            item.getRarity() == 0
+                            item.getRarity() == 0 &&
+                            item.getQuality() >= minQuality
                         )
                         .collect(Collectors.toList())
                     );
@@ -179,11 +182,33 @@ public class PileCollector extends Bot {
             Utils.consolePrint("Wrong value!");
         }
     }
+    
+    private void setMinQuality(String[] input) {
+        if (input == null || input.length == 0) {
+            printInputKeyUsageString(PileCollector.InputKey.mq);
+            return;
+        }
+        
+        try {
+            minQuality = Float.parseFloat(input[0]);
+            if (minQuality < 0) throw new NumberFormatException();
+            if (minQuality > 0 && minQuality < 1)
+                Utils.consolePrint(
+                    "Did you mean `%s %2$.1f` to move items >= %2$.1f QL?",
+                    PileCollector.InputKey.mq.getName(),
+                    minQuality * 100
+                );
+            Utils.consolePrint("Items with QL >= %.1f will be collected", minQuality);
+        } catch (NumberFormatException err) {
+            Utils.consolePrint("`%s` is not a positive real number", input[0]);
+        }
+    }
 
     private enum InputKey implements Bot.InputKey {
         stn("Set the name for target items. Default name is \"dirt\"", "name"),
         st("Set the target bulk inventory to put items to. Provide an optional name of containers inside inventory. Default is \"large crate\"", "[name]"),
-        stcc("Set the capacity for target container. Default value is 300", "capacity(integer value)");
+        stcc("Set the capacity for target container. Default value is 300", "capacity(integer value)"),
+        mq("Set minimum quality of items to be collected", "QL(0-100)");
 
         private String description;
         private String usage;
