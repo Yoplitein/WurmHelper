@@ -76,8 +76,8 @@ public class ForesterBot extends Bot {
         World world = WurmHelper.hud.getWorld();
         PlayerObj player = world.getPlayer();
         maxActions = Utils.getMaxActionNumber();
-        InventoryMetaItem sickle = Utils.getInventoryItem("sickle");
-        InventoryMetaItem bucket = Utils.getInventoryItem("bucket");
+        InventoryMetaItem sickle = Utils.locateToolItem("sickle");
+        InventoryMetaItem bucket = Utils.locateToolItem("bucket");
         lastActionFinishedTime = System.currentTimeMillis();
         long sickleId;
         if (sickle == null) {
@@ -175,7 +175,7 @@ public class ForesterBot extends Bot {
                         }
                     }
                     if (planting && (tileType.tilename.equals("Steppe")||tileType.tilename.equals("Moss"))) {
-                        InventoryMetaItem shovel = Utils.getInventoryItem("shovel");
+                        InventoryMetaItem shovel = Utils.locateToolItem("shovel");
                         if (shovel != null) {
                             world.getServerConnection().sendAction(shovel.getId(),
                                     new long[]{Tiles.getTileId(checkedtiles[tileIndex][0], checkedtiles[tileIndex][1], 0)},
@@ -343,7 +343,7 @@ public class ForesterBot extends Bot {
 
     private void toggleShriveledTreesChopping() {
         if (!shriveledTreesChopping) {
-            InventoryMetaItem hatchet = Utils.getInventoryItem("hatchet");
+            InventoryMetaItem hatchet = Utils.locateToolItem("hatchet");
             if (hatchet == null) {
                 Utils.consolePrint("You don't have a hatchet!");
             } else {
@@ -361,7 +361,7 @@ public class ForesterBot extends Bot {
     private void toggleDeforestation() {
         deforesting = !deforesting;
         if (deforesting) {
-            InventoryMetaItem hatchet = Utils.getInventoryItem("hatchet");
+            InventoryMetaItem hatchet = Utils.locateToolItem("hatchet");
             if (hatchet == null) {
                 Utils.consolePrint("You don't have a hatchet!");
                 deforesting = false;

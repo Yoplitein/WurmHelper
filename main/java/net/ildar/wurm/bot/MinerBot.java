@@ -69,7 +69,7 @@ public class MinerBot extends Bot {
     @Override
     public void work() throws Exception{
         staminaThreshold = 0.96f;
-        pickaxe = Utils.getInventoryItem("pickaxe");
+        pickaxe = Utils.locateToolItem("pickaxe");
         if (pickaxe == null) {
             Utils.consolePrint("You don't have a pickaxe!");
             deactivate();

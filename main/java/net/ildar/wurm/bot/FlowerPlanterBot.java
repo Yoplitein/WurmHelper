@@ -36,8 +36,8 @@ public class FlowerPlanterBot extends Bot {
         Object progressBar = ReflectionUtil.getPrivateField(creationWindow,
                 ReflectionUtil.getField(creationWindow.getClass(), "progressBar"));
         int maxActions = Utils.getMaxActionNumber();
-        InventoryMetaItem sickle = Utils.getInventoryItem("sickle");
-        InventoryMetaItem shovel = Utils.getInventoryItem("shovel");
+        InventoryMetaItem sickle = Utils.locateToolItem("sickle");
+        InventoryMetaItem shovel = Utils.locateToolItem("shovel");
         if (sickle != null)
             sickleId = sickle.getId();
         if (shovel != null)

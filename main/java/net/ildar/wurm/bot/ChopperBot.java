@@ -36,7 +36,7 @@ public class ChopperBot extends Bot {
     public void work() throws Exception{
         setStaminaThreshold(0.96f);
         setClicks(Utils.getMaxActionNumber());
-        InventoryMetaItem hatchet = Utils.getInventoryItem("hatchet");
+        InventoryMetaItem hatchet = Utils.locateToolItem("hatchet");
         long hatchetId;
         if (hatchet == null) {
             Utils.consolePrint("You don't have a hatchet!");

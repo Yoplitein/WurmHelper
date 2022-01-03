@@ -393,6 +393,19 @@ public class Utils {
         }
         return new ArrayList<>();
     }
+    
+    public static InventoryMetaItem locateToolItem(String toolName) {
+        InventoryListComponent mainInventory = WurmHelper.hud.getInventoryWindow().getInventoryListComponent();
+        List<InventoryMetaItem> items = getInventoryItems(mainInventory, toolName);
+        
+        if (items.size() == 0) {
+            consolePrint("Error: Couldn't find any tools matching `%s`!", toolName);
+            return null;
+        } else if (items.size() > 1)
+            consolePrint("Warning: search for tool `%s` matched %d items", toolName, items.size());
+        
+        return items.get(0);
+    }
 
     public static InventoryMetaItem getRootItem(InventoryListComponent ilc) {
         try {

@@ -25,7 +25,7 @@ public class ProspectorBot extends Bot {
 
     @Override
     public void work() throws Exception{
-        InventoryMetaItem pickaxe = Utils.getInventoryItem("pickaxe");
+        InventoryMetaItem pickaxe = Utils.locateToolItem("pickaxe");
         long pickaxeId;
         if (pickaxe == null) {
             Utils.consolePrint("You don't have a pickaxe");

@@ -576,23 +576,6 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         );
     }
     
-    long findTool(String name)
-    {
-        List<InventoryMetaItem> items = Utils.getInventoryItems(name);
-        if(items.size() == 0)
-            return -10;
-        
-        InventoryMetaItem item = items.get(0);
-        if(items.size() > 1)
-            Utils.consolePrint(
-                "Warning: search for tool `%s` matched several, using the `%s`",
-                name,
-                item.getBaseName()
-            );
-        
-        return items.get(0).getId();
-    }
-    
     @Override
     public String getPlayerName()
     {
@@ -641,13 +624,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     {
         if(shovelID == -10)
         {
-            shovelID = findTool("shovel");
-            
-            if(shovelID == -10)
-            {
-                Utils.consolePrint("Warning: couldn't find a shovel to dig with");
+            InventoryMetaItem tool = Utils.locateToolItem("shovel");
+            if(tool == null)
                 return;
-            }
+            else
+                shovelID = tool.getId();
         }
         
         final int tx = Math.round(WurmHelper.hud.getWorld().getPlayerPosX() / 4);
@@ -661,13 +642,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     {
         if(shovelID == -10)
         {
-            shovelID = findTool("shovel");
-            
-            if(shovelID == -10)
-            {
-                Utils.consolePrint("Warning: couldn't find a shovel to dig with");
+            InventoryMetaItem tool = Utils.locateToolItem("shovel");
+            if(tool == null)
                 return;
-            }
+            else
+                shovelID = tool.getId();
         }
         
         world.getServerConnection().sendAction(shovelID, new long[]{tileID}, PlayerAction.LEVEL);
@@ -679,13 +658,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         execute(() -> {
             if(pickaxeID == -10)
             {
-                pickaxeID = findTool("pickaxe");
-                
-                if(pickaxeID == -10)
-                {
-                    Utils.consolePrint("Warning: couldn't find a pickaxe to mine with");
+                InventoryMetaItem tool = Utils.locateToolItem("pickaxe");
+                if(tool == null)
                     return;
-                }
+                else
+                    pickaxeID = tool.getId();
             }
             
             world.getServerConnection().sendAction(

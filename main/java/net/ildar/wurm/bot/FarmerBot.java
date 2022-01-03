@@ -178,7 +178,7 @@ public class FarmerBot extends Bot {
 
     private void toggleCultivating() {
         if (!cultivating) {
-            shovelItem = Utils.getInventoryItem("shovel");
+            shovelItem = Utils.locateToolItem("shovel");
             if (shovelItem == null) {
                 Utils.consolePrint("The player don't have a shovel!");
                 return;
@@ -212,7 +212,7 @@ public class FarmerBot extends Bot {
 
     private void toggleHarvesting() {
         if (!harvesting) {
-            scytheItem = Utils.getInventoryItem("scythe");
+            scytheItem = Utils.locateToolItem("scythe");
             if (scytheItem == null) {
                 Utils.consolePrint("The player don't have a scythe!");
                 return;
@@ -228,7 +228,7 @@ public class FarmerBot extends Bot {
 
     private void toggleFarmTending() {
         if (!farmTending) {
-            rakeItem = Utils.getInventoryItem("rake");
+            rakeItem = Utils.locateToolItem("rake");
             if (rakeItem == null) {
                 Utils.consolePrint("The player don't have a rake!");
                 return;

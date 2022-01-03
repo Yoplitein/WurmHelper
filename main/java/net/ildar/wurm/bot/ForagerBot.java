@@ -415,7 +415,7 @@ public class ForagerBot extends Bot {
     private void toggleGrassGathering() {
         grassGathering = !grassGathering;
         if (grassGathering) {
-            InventoryMetaItem sickle = Utils.getInventoryItem("sickle");
+            InventoryMetaItem sickle = Utils.locateToolItem("sickle");
             if (sickle == null) {
                 Utils.consolePrint("You don't have a sickle! " + this.getClass().getSimpleName() + " won't start");
                 grassGathering = false;

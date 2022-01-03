@@ -81,7 +81,7 @@ public class DiggerBot extends Bot{
 
     @Override
     protected void work() throws Exception{
-        shovelItem = Utils.getInventoryItem("shovel");
+        shovelItem = Utils.locateToolItem("shovel");
         if (shovelItem == null) {
             Utils.consolePrint("Player doesn't have a shovel!");
             return;
@@ -385,7 +385,7 @@ public class DiggerBot extends Bot{
 
     private void toggleSurfaceMining() {
         if (!surfaceMiningMode) {
-            pickaxeItem = Utils.getInventoryItem("pickaxe");
+            pickaxeItem = Utils.locateToolItem("pickaxe");
             if (pickaxeItem == null) {
                 Utils.consolePrint("You don't have a pickaxe");
             }

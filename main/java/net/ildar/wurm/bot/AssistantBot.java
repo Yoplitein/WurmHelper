@@ -568,7 +568,7 @@ public class AssistantBot extends Bot {
                 PaperDollSlot pds = ReflectionUtil.getPrivateField(pdi,
                         ReflectionUtil.getField(pdi.getClass(), "bodyItem"));
                 bodyId = pds.getItemId();
-                InventoryMetaItem statuette = Utils.getInventoryItem("statuette of");
+                InventoryMetaItem statuette = Utils.locateToolItem("statuette of");
                 if (statuette == null) {
                     Utils.consolePrint("Can't find a statuette in your inventory");
                     casting = false;
@@ -684,7 +684,7 @@ public class AssistantBot extends Bot {
                 PaperDollSlot pds = ReflectionUtil.getPrivateField(pdi,
                         ReflectionUtil.getField(pdi.getClass(), "bodyItem"));
                 bodyId = pds.getItemId();
-                InventoryMetaItem statuette = Utils.getInventoryItem("statuette of");
+                InventoryMetaItem statuette = Utils.locateToolItem("statuette of");
                 if (statuette == null || bodyId == 0) {
                     wovCasting = false;
                     Utils.consolePrint("Couldn't find a statuette in your inventory. casting is off");

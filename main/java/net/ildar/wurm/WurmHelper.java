@@ -160,7 +160,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         InventoryMetaItem toolItem = Utils.getInventoryItem(action.toolName);
         if (toolItem == null && action == Action.Butcher) {
             Utils.consolePrint("A player don't have " + Action.Butcher.toolName + ", trying to find carving knife...");
-            toolItem = Utils.getInventoryItem("carving knife");
+            toolItem = Utils.locateToolItem("carving knife");
             if (toolItem == null)
                 Utils.consolePrint("But the player don't have a carving knife too");
         }

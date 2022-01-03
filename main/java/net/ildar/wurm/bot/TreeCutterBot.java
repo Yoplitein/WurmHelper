@@ -70,7 +70,7 @@ public class TreeCutterBot extends Bot{
         PlayerObj player = world.getPlayer();
         lastActionFinishedTime = System.currentTimeMillis();
 
-        InventoryMetaItem hatchet = Utils.getInventoryItem("hatchet");
+        InventoryMetaItem hatchet = Utils.locateToolItem("hatchet");
 
         if (hatchet == null) {
             Utils.consolePrint("You don't have a hatchet! " + this.getClass().getSimpleName() + " won't start");
