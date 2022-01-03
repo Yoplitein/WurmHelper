@@ -66,9 +66,10 @@ public class PileCollector extends Bot {
                         float itemY = groundItemData.getY();
                         long itemID = groundItemData.getId();
                         if ((Math.sqrt(Math.pow(itemX - x, 2) + Math.pow(itemY - y, 2)) <= MAX_DISTANCE)) {
-                            if (groundItemData.getName().toLowerCase().contains("pile of ") && !openedPiles.contains(itemID))
+                            final boolean isPile = groundItemData.getName().toLowerCase().contains("pile of ");
+                            if (isPile && !openedPiles.contains(itemID))
                                 WurmHelper.hud.sendAction(PlayerAction.OPEN, itemID);
-                            else if (groundItemData.getName().contains(targetItemName) && !ignoredItems.contains(itemID)) {
+                            else if (!isPile && groundItemData.getName().contains(targetItemName) && !ignoredItems.contains(itemID)) {
                                 // we can't get quality of items on the ground (not synced with client)
                                 // so they have to be temporarily moved into player inventory
                                 // (not sure why this was also done previously, moving ground items directly works?)
