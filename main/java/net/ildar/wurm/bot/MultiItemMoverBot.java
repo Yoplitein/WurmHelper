@@ -29,6 +29,7 @@ public class MultiItemMoverBot extends Bot
         
         registerInputHandler(Inputs.fl, input -> toggleToplevelOnly());
         registerInputHandler(Inputs.ns, input -> newSet());
+        registerInputHandler(Inputs.ds, input -> deleteSet());
         registerInputHandler(Inputs.ss, this::selectSet);
         registerInputHandler(Inputs.ls, input -> listSets());
         registerInputHandler(Inputs.st, input -> setTarget(false));
@@ -44,6 +45,8 @@ public class MultiItemMoverBot extends Bot
         while(isActive())
         {
             waitOnPause();
+            while(itemSets.size() == 0)
+                sleep(1000);
             
             List<InventoryMetaItem> inventoryItems;
             for(ItemSet set: itemSets)
@@ -95,17 +98,46 @@ public class MultiItemMoverBot extends Bot
         Utils.consolePrint("Created and selected new item set with index %d", selectedSet);
     }
     
+    void deleteSet()
+    {
+        if(itemSets.size() == 0 || selectedSet == -1)
+        {
+            Utils.consolePrint("Don't have any item sets (or somehow none selected) to delete!");
+            return;
+        }
+        
+        itemSets.remove(selectedSet);
+        Utils.consolePrint("Deleted item set %d", selectedSet);
+        selectedSet = itemSets.size() - 1;
+    }
+    
     void selectSet(String[] args)
     {
         if(args == null || args.length != 1)
         {
-            printInputKeyUsageString(Inputs.ss);
+            printInputKeyUsageString(Inputs.cs);
+            return;
+        }
+        
+        final int numSets = itemSets.size();
+        if(numSets == 0)
+        {
+            Utils.consolePrint("No item sets to select! Use ns subcommand to create one");
             return;
         }
         
         try
         {
             int newSelection = Integer.parseInt(args[0]);
+            if(newSelection >= numSets)
+            {
+                Utils.consolePrint(
+                    "Only have %d item sets, index must be in 0 .. %d",
+                    numSets, numSets - 1
+                );
+                return;
+            }
+            
             selectedSet = newSelection;
             Utils.consolePrint("Selected item set %d", selectedSet);
         }
@@ -117,6 +149,12 @@ public class MultiItemMoverBot extends Bot
     
     void listSets()
     {
+        if(itemSets.size() == 0)
+        {
+            Utils.consolePrint("No item sets yet");
+            return;
+        }
+        
         for(int index = 0; index < itemSets.size(); index++)
             Utils.consolePrint(
                 "%s %d: %s",
@@ -128,6 +166,11 @@ public class MultiItemMoverBot extends Bot
     
     void setTarget(boolean isRoot)
     {
+        if(itemSets.size() == 0 || selectedSet == -1)
+        {
+            Utils.consolePrint("Don't have any item sets (or somehow none selected)");
+            return;
+        }
         itemSets.get(selectedSet).setTarget(isRoot);
     }
     
@@ -136,6 +179,12 @@ public class MultiItemMoverBot extends Bot
         if(args.length == 0)
         {
             printInputKeyUsageString(Inputs.a);
+            return;
+        }
+        
+        if(itemSets.size() == 0 || selectedSet == -1)
+        {
+            Utils.consolePrint("Don't have any item sets (or somehow none selected)");
             return;
         }
         
@@ -152,6 +201,12 @@ public class MultiItemMoverBot extends Bot
     
     void clearItems()
     {
+        if(itemSets.size() == 0 || selectedSet == -1)
+        {
+            Utils.consolePrint("Don't have any item sets (or somehow none selected)");
+            return;
+        }
+        
         itemSets.get(selectedSet).itemNames.clear();
         Utils.consolePrint("Cleared items for set %d", selectedSet);
     }
@@ -245,6 +300,7 @@ public class MultiItemMoverBot extends Bot
         fl("Toggle moving of only top-level items", ""),
         
         ns("Create new item set", ""),
+        ds("Delete current item set", ""),
         ss("Select item set", "index"),
         ls("Show item sets", ""),
         
