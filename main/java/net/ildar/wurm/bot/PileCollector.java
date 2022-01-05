@@ -34,6 +34,7 @@ public class PileCollector extends Bot {
     private int containerCapacity = 300;
     private String targetItemName = "dirt";
     private float minQuality = 0;
+    private String customContainer = null;
     
     // items picked up from ground that failed predicates and were dropped back to ground
     private Set<Long> ignoredItems = new HashSet<>();
@@ -43,6 +44,7 @@ public class PileCollector extends Bot {
         registerInputHandler(PileCollector.InputKey.st, this::setTargetInventoryName);
         registerInputHandler(PileCollector.InputKey.stcc, this::setContainerCapacity);
         registerInputHandler(PileCollector.InputKey.mq, this::setMinQuality);
+        registerInputHandler(PileCollector.InputKey.cc, this::setCustomContainer);
     }
 
     @Override
@@ -66,10 +68,10 @@ public class PileCollector extends Bot {
                         float itemY = groundItemData.getY();
                         long itemID = groundItemData.getId();
                         if ((Math.sqrt(Math.pow(itemX - x, 2) + Math.pow(itemY - y, 2)) <= MAX_DISTANCE)) {
-                            final boolean isPile = groundItemData.getName().toLowerCase().contains("pile of ");
-                            if (isPile && !openedPiles.contains(itemID))
+                            final boolean isContainer = shouldSearch(groundItemData.getName().toLowerCase());
+                            if (isContainer && !openedPiles.contains(itemID))
                                 WurmHelper.hud.sendAction(PlayerAction.OPEN, itemID);
-                            else if (!isPile && groundItemData.getName().contains(targetItemName) && !ignoredItems.contains(itemID)) {
+                            else if (!isContainer && groundItemData.getName().contains(targetItemName) && !ignoredItems.contains(itemID)) {
                                 // we can't get quality of items on the ground (not synced with client)
                                 // so they have to be temporarily moved into player inventory
                                 // (not sure why this was also done previously, moving ground items directly works?)
@@ -93,7 +95,7 @@ public class PileCollector extends Bot {
                             continue;
                             
                         InventoryMetaItem rootItem = Utils.getRootItem(ilc);
-                        if (rootItem == null || (isContainerWindow && !rootItem.getBaseName().toLowerCase().contains("pile of")))
+                        if (rootItem == null || (isContainerWindow && !shouldSearch(rootItem.getBaseName().toLowerCase())))
                             continue;
                         
                         openedPiles.add(rootItem.getId());
@@ -132,6 +134,13 @@ public class PileCollector extends Bot {
             }
             sleep(timeout);
         }
+    }
+    
+    private boolean shouldSearch(String itemName) {
+        return
+            itemName.contains("pile of ") ||
+            customContainer != null && itemName.contains(customContainer)
+        ;
     }
 
     private void moveToContainers(List<InventoryMetaItem> targetItems) {
@@ -233,12 +242,26 @@ public class PileCollector extends Bot {
             Utils.consolePrint("`%s` is not a positive real number", input[0]);
         }
     }
+    
+    private void setCustomContainer(String[] input) {
+        if (input == null || input.length == 0)
+            customContainer = null;
+        else
+            customContainer = String.join(" ", input).toLowerCase();
+        Utils.consolePrint(
+            customContainer == null ?
+                "Only piles of items will be searched" :
+                "Piles of items and containers named like `%s` will be searched",
+            customContainer
+        );
+    }
 
     private enum InputKey implements Bot.InputKey {
         stn("Set the name for target items. Default name is \"dirt\"", "name"),
         st("Set the target bulk inventory to put items to. Provide an optional name of containers inside inventory. Default is \"large crate\"", "[name]"),
         stcc("Set the capacity for target container. Default value is 300", "capacity(integer value)"),
-        mq("Set minimum quality of items to be collected", "QL(0-100)");
+        mq("Set minimum quality of items to be collected", "QL(0-100)"),
+        cc("Set/clear additional container name to search for target items", "name(or nothing to clear)");
 
         private String description;
         private String usage;
