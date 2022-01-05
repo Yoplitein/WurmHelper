@@ -97,7 +97,7 @@ public class MultiItemMoverBot extends Bot
     
     void selectSet(String[] args)
     {
-        if(args.length != 1)
+        if(args == null || args.length != 1)
         {
             printInputKeyUsageString(Inputs.ss);
             return;

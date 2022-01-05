@@ -103,7 +103,7 @@ public class ContainerItemGetterBot extends Bot
     
     void addItem(String[] args)
     {
-        if(args.length == 0)
+        if(args == null || args.length == 0)
         {
             printInputKeyUsageString(Inputs.a);
             return;

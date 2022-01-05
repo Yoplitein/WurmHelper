@@ -319,7 +319,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         }
         assert clients != null;
         
-        if(args.length == 0)
+        if(args == null || args.length == 0)
         {
             Utils.consolePrint("Must specify a subcommand");
             return;
@@ -481,7 +481,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             return;
         }
         
-        if(args.length != 1)
+        if(args == null || args.length != 1)
         {
             printInputKeyUsageString(Inputs.regaddr);
             return;

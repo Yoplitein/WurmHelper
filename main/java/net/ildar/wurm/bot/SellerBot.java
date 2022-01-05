@@ -103,7 +103,7 @@ public class SellerBot extends Bot
     
     void addItem(String[] args)
     {
-        if(args.length == 0)
+        if(args == null || args.length == 0)
         {
             printInputKeyUsageString(Inputs.a);
             return;
@@ -126,7 +126,7 @@ public class SellerBot extends Bot
     
     void addBlacklist(String[] args)
     {
-        if(args.length == 0)
+        if(args == null || args.length == 0)
         {
             printInputKeyUsageString(Inputs.a);
             return;
@@ -172,7 +172,7 @@ public class SellerBot extends Bot
     
     void setMaxSellActions(String[] args)
     {
-        if(args.length != 1)
+        if(args == null || args.length != 1)
         {
             printInputKeyUsageString(Inputs.sc);
             return;
