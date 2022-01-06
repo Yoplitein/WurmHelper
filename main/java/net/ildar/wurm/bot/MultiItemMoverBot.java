@@ -28,10 +28,10 @@ public class MultiItemMoverBot extends Bot
         itemSets.add(new ItemSet());
         
         registerInputHandler(Inputs.fl, input -> toggleToplevelOnly());
-        registerInputHandler(Inputs.ns, input -> newSet());
-        registerInputHandler(Inputs.ds, input -> deleteSet());
-        registerInputHandler(Inputs.ss, this::selectSet);
-        registerInputHandler(Inputs.ls, input -> listSets());
+        registerInputHandler(Inputs.isn, input -> newSet());
+        registerInputHandler(Inputs.isd, input -> deleteSet());
+        registerInputHandler(Inputs.isc, this::selectSet);
+        registerInputHandler(Inputs.isl, input -> listSets());
         registerInputHandler(Inputs.st, input -> setTarget(false));
         registerInputHandler(Inputs.str, input -> setTarget(true));
         registerInputHandler(Inputs.a, this::addItem);
@@ -115,14 +115,17 @@ public class MultiItemMoverBot extends Bot
     {
         if(args == null || args.length != 1)
         {
-            printInputKeyUsageString(Inputs.cs);
+            printInputKeyUsageString(Inputs.isc);
             return;
         }
         
         final int numSets = itemSets.size();
         if(numSets == 0)
         {
-            Utils.consolePrint("No item sets to select! Use ns subcommand to create one");
+            Utils.consolePrint(
+                "No item sets to select! Use %s subcommand to create one",
+                Inputs.isn.name()
+            );
             return;
         }
         
@@ -299,15 +302,16 @@ public class MultiItemMoverBot extends Bot
     {
         fl("Toggle moving of only top-level items", ""),
         
-        ns("Create new item set", ""),
-        ds("Delete current item set", ""),
-        ss("Select item set", "index"),
-        ls("Show item sets", ""),
+        isn("Create new item set", ""),
+        isd("Delete current item set", ""),
+        isc("Choose item set to operate on", "index"),
+        isl("Show item sets", ""),
         
-        st("Set target item", ""),
-        str("Set target container", ""),
-        a("Add item to selected set", "name"),
-        clear("Clear list of items in selected set", "");
+        st("Set target item for chosen set", ""),
+        str("Set target container for chosen set", ""),
+        a("Add item to chosen set", "name"),
+        clear("Clear list of items in chosen set", ""),
+        ;
         
         
         String description;
