@@ -1,6 +1,10 @@
 package net.ildar.wurm.bot;
 
 import java.util.ArrayList;
+import java.util.List;
+
+import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.gui.InventoryListComponent;
 
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
@@ -45,22 +49,16 @@ public class BulkItemGetterBot extends Bot
             while (specs.size() <= 0)
                 sleep(1000);
             
-            for(ItemSpec item: specs)
+            for(ItemSpec spec: specs)
             {
-                long srcItem = item.source;
-                if(item.fixedSource)
-                {
-                    long[] items = WurmHelper.hud.getCommandTargetsFrom(item.fixedX, item.fixedY);
-                    if(items != null && items.length > 0)
-                        srcItem = items[0];
-                    else
-                        Utils.consolePrint("Can't find any item at point (%d, %d)", item.fixedX, item.fixedY);
-                }
-                if(srcItem == -10) continue;
+                if(spec.target == null) continue;
+                
+                spec.updateSource(); // ignored when not fixed point
+                if(spec.source == null) continue;
                 
                 closeBMLWindow = true;
-                // Utils.consolePrint(i + " - moving " + sources.get(i) + " to " + targets.get(i));
-                WurmHelper.hud.getWorld().getServerConnection().sendMoveSomeItems(item.target, new long[]{srcItem});
+                // Utils.consolePrint("moving `%s` => `%s`", spec.source.getDisplayName(), spec.target.getDisplayName());
+                WurmHelper.hud.getWorld().getServerConnection().sendMoveSomeItems(spec.target.getId(), new long[]{spec.source.getId()});
                 
                 int sleeps = 0;
                 while(closeBMLWindow && sleeps++ < 50) sleep(100);
@@ -70,6 +68,7 @@ public class BulkItemGetterBot extends Bot
                     closeBMLWindow = false;
                 }
             }
+            // Utils.consolePrint("main loop sleep for %dms", timeout);
             sleep(timeout);
         }
     }
@@ -212,17 +211,17 @@ public class BulkItemGetterBot extends Bot
 
 class ItemSpec
 {
-    long target = -10;
-    long source = -10;
-    boolean fixedSource = false;
-    int fixedX;
-    int fixedY;
+    InventoryMetaItem target = null;
+    InventoryMetaItem source = null;
+    boolean fixedPointSrc = false;
+    int fixedX = -1;
+    int fixedY = -1;
     
     public ItemSpec()
     {
         // default to player's inventory
-        target = Utils.getRootItem(WurmHelper.hud.getInventoryWindow().getInventoryListComponent()).getId();
-        Utils.consolePrint("New item set will move to player inventory");
+        target = Utils.getRootItem(WurmHelper.hud.getInventoryWindow().getInventoryListComponent());
+        Utils.consolePrint("New item spec will move to player inventory");
     }
     
     public void setSource(boolean fixed)
@@ -230,44 +229,72 @@ class ItemSpec
         final int mouseX = WurmHelper.hud.getWorld().getClient().getXMouse();
         final int mouseY = WurmHelper.hud.getWorld().getClient().getYMouse();
         
-        fixedSource = fixed;
+        source = null;
+        fixedX = -1;
+        fixedY = -1;
+        fixedPointSrc = fixed;
         if(fixed)
         {
-            source = -10;
             fixedX = mouseX;
             fixedY = mouseY;
             Utils.consolePrint("Current item set will pull items at mouse coordinates %d,%d", fixedX, fixedY);
         }
         else
-        {
-            long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
-            if(targets != null && targets.length > 0)
-            {
-                source = targets[0];
-                Utils.consolePrint("New source item is %d", source);
-            }
-            else
-                Utils.consolePrint("Couldn't find an item under the cursor");
-        }
+            updateSource(mouseX, mouseY);
     }
     
     public void setTarget()
     {
-        int x = WurmHelper.hud.getWorld().getClient().getXMouse();
-        int y = WurmHelper.hud.getWorld().getClient().getYMouse();
-        long[] targets = WurmHelper.hud.getCommandTargetsFrom(x,y);
-        if (targets != null && targets.length > 0)
+        // TODO: readd support for targeting subcontainers, separate command for this case
+        target = Utils.getRootItem(Utils.getTargetInventory());
+        
+        if(target != null)
+            Utils.consolePrint("New target is %s", target.getDisplayName());
+        else
+            Utils.consolePrint("Couldn't find any target containers");
+    }
+    
+    public void updateSource()
+    {
+        if(!fixedPointSrc)
+            return;
+        
+        updateSource(fixedX, fixedY);
+    }
+    
+    private void updateSource(int x, int y)
+    {
+        InventoryListComponent inv = Utils.getInventoryAtPoint(x, y);
+        List<InventoryMetaItem> items = Utils.getInventoryItemsAtPoint(inv, x, y);
+        
+        if(items.size() == 0)
         {
-            target = targets[0];
-            Utils.consolePrint("New target is %s", target);
-        } else
-            Utils.consolePrint("Couldn't find the target for %s", this.getClass().getSimpleName());
+            Utils.consolePrint("Couldn't set source: no items found");
+            return;
+        }
+        else if(items.size() > 1)
+            Utils.consolePrint("More than one item found, defaulting to the first");
+        
+        source = items.get(0);
+        Utils.consolePrint("Source is now: %s", source.getDisplayName());
     }
     
     @Override
     public String toString()
     {
-        // FIXME: cache source/target names and use those
-        return super.toString();
+        final String srcName = fixedPointSrc ?
+            String.format(
+                "items at %d,%d (currently %s)",
+                fixedX,
+                fixedY,
+                source == null ? "<unset>" : source.getDisplayName()
+            ) :
+            source != null ? source.getDisplayName() : "<unset>"
+        ;
+        final String destName = target == null ?
+            "<unset>" :
+            target.getDisplayName()
+        ;
+        return String.format("%s => %s", srcName, destName);
     }
 }
