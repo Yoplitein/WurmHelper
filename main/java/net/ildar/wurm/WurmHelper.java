@@ -1,7 +1,6 @@
 package net.ildar.wurm;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
-import com.wurmonline.client.renderer.CreatureData;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.*;
@@ -20,7 +19,6 @@ import org.gotti.wurmunlimited.modloader.interfaces.Initable;
 import org.gotti.wurmunlimited.modloader.interfaces.PreInitable;
 import org.gotti.wurmunlimited.modloader.interfaces.WurmClientMod;
 
-import java.io.FileInputStream;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.logging.Level;
@@ -157,7 +155,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             showActionList();
             return;
         }
-        InventoryMetaItem toolItem = Utils.getInventoryItem(action.toolName);
+        InventoryMetaItem toolItem = Utils.locateToolItem(action.toolName);
         if (toolItem == null && action == Action.Butcher) {
             Utils.consolePrint("A player don't have " + Action.Butcher.toolName + ", trying to find carving knife...");
             toolItem = Utils.locateToolItem("carving knife");
