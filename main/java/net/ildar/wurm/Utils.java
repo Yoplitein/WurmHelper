@@ -331,19 +331,39 @@ public class Utils {
         return getInventoryItems(allItems, itemName);
     }
     public static List<InventoryMetaItem> getInventoryItems(List<InventoryMetaItem> items, String itemName) {
+        return getInventoryItems(
+            items,
+            item ->
+                item.getBaseName().contains(itemName) ||
+                itemName.contains("'") &&
+                item.getDisplayName().contains(itemName.replaceAll("'",""))
+        );
+    }
+    
+    public static List<InventoryMetaItem> getInventoryItems(Predicate<InventoryMetaItem> filter) {
+        List<InventoryMetaItem> allItems = getSelectedItems(true, true);
+        return getInventoryItems(allItems, filter);
+    }
+    
+    public static List<InventoryMetaItem> getInventoryItems(InventoryListComponent ilc, Predicate<InventoryMetaItem> filter) {
+        List<InventoryMetaItem> allItems = getSelectedItems(ilc, true, true);
+        return getInventoryItems(allItems, filter);
+    }
+    
+    public static List<InventoryMetaItem> getInventoryItems(List<InventoryMetaItem> items, Predicate<InventoryMetaItem> filter) {
         List<InventoryMetaItem> targets = new ArrayList<>();
         try {
             if (items == null || items.size() == 0) {
                 return targets;
             }
             for (InventoryMetaItem invItem : items) {
-                if (invItem.getBaseName().contains(itemName) || itemName.contains("'") && invItem.getDisplayName().contains(itemName.replaceAll("'",""))) {
+                if (filter.test(invItem)) {
                     targets.add(invItem);
                 }
             }
         } catch (Exception e) {
-            consolePrint("Got error while searching for " + itemName + " in your inventory. Error - " + e.getMessage());
-            consolePrint( e.toString());
+            consolePrint("Got error while searching for items: %s", e.getMessage());
+            consolePrint(e.toString());
         }
         return targets;
     }
