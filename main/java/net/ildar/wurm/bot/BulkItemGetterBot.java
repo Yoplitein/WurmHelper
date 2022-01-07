@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.options.Options;
 import com.wurmonline.client.renderer.gui.InventoryListComponent;
+import com.wurmonline.shared.util.MaterialUtilities;
 
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
@@ -17,6 +19,7 @@ import net.ildar.wurm.annotations.BotInfo;
 public class BulkItemGetterBot extends Bot
 {
     public static boolean closeBMLWindow;
+    public static int moveQuantity = -1;
     ArrayList<ItemSpec> specs = new ArrayList<>();
     int selectedSpec = 0;
     
@@ -28,6 +31,7 @@ public class BulkItemGetterBot extends Bot
         registerInputHandler(Inputs.isd, input -> deleteSpec());
         registerInputHandler(Inputs.isc, this::selectSpec);
         registerInputHandler(Inputs.isl, input -> listSpecs());
+        registerInputHandler(Inputs.c, this::setQuantity);
         registerInputHandler(Inputs.ss, input -> setSource(false));
         registerInputHandler(Inputs.ssxy, input -> setSource(true));
         registerInputHandler(Inputs.st, input -> setTarget());
@@ -37,7 +41,8 @@ public class BulkItemGetterBot extends Bot
     public void work() throws Exception
     {
         closeBMLWindow = false;
-        setTimeout(15000);
+        moveQuantity = -1;
+        setTimeout(5000);
         registerEventProcessor(
             message -> message.contains("That item is already busy"),
             () -> closeBMLWindow = false
@@ -56,8 +61,17 @@ public class BulkItemGetterBot extends Bot
                 spec.updateSource(); // ignored when not fixed point
                 if(spec.source == null) continue;
                 
+                if(spec.stockQuantity <= 0)
+                    moveQuantity = -1;
+                else
+                {
+                    final int targetQuantity = spec.countTargetQuantity();
+                    moveQuantity = spec.stockQuantity - targetQuantity;
+                    if(moveQuantity <= 0) continue; // fully stocked
+                }
+                
                 closeBMLWindow = true;
-                // Utils.consolePrint("moving `%s` => `%s`", spec.source.getDisplayName(), spec.target.getDisplayName());
+                // Utils.consolePrint("moving `%s` => `%s`", ItemSpec.getCanonicalName(spec.source), ItemSpec.getCanonicalName(spec.target));
                 WurmHelper.hud.getWorld().getServerConnection().sendMoveSomeItems(spec.target.getId(), new long[]{spec.source.getId()});
                 
                 int sleeps = 0;
@@ -149,6 +163,37 @@ public class BulkItemGetterBot extends Bot
             );
     }
     
+    void setQuantity(String[] args)
+    {
+        if(args == null || args.length != 1)
+        {
+            printInputKeyUsageString(Inputs.isc);
+            return;
+        }
+        
+        if(specs.size() == 0 || selectedSpec == -1)
+        {
+            Utils.consolePrint("Don't have any specs (or somehow none selected) to set quantity of!");
+            return;
+        }
+        
+        try
+        {
+            int newQuantity = Integer.parseInt(args[0]);
+            if(newQuantity <= 0) newQuantity = -1;
+            specs.get(selectedSpec).stockQuantity = newQuantity;
+            
+            if(newQuantity > 0)
+                Utils.consolePrint("Bot will keep at most %d items in stock", newQuantity);
+            else
+                Utils.consolePrint("Bot will keep as many items as possible in target");
+        }
+        catch(NumberFormatException err)
+        {
+            Utils.consolePrint("`%s` is not an integer", args[0]);
+        }
+    }
+    
     void setSource(boolean fixed)
     {
         if(specs.size() == 0 || selectedSpec == -1)
@@ -176,6 +221,7 @@ public class BulkItemGetterBot extends Bot
         isc("Choose an item spec to operate on", "number"),
         isl("List item specs", ""),
         
+        c("Set quantity of source items to keep stocked in target", "number"),
         ss("Set the source item for chosen spec (in bulk storage) to what the user is currenly pointing to", ""),
         ssxy("Find source item(s) for chosen spec from a fixed point at current cursor position", ""),
         st("Set the target item for chosen spec to what the user is currently pointing to", ""),
@@ -216,12 +262,14 @@ class ItemSpec
     boolean fixedPointSrc = false;
     int fixedX = -1;
     int fixedY = -1;
+    int stockQuantity = -1;
     
     public ItemSpec()
     {
-        // default to player's inventory
-        target = Utils.getRootItem(WurmHelper.hud.getInventoryWindow().getInventoryListComponent());
-        Utils.consolePrint("New item spec will move to player inventory");
+        // move to player's inventory by default
+        targetPlayerInventory();
+        if(target != null)
+            Utils.consolePrint("New item spec will move to player's inventory");
     }
     
     public void setSource(boolean fixed)
@@ -248,10 +296,26 @@ class ItemSpec
         // TODO: readd support for targeting subcontainers, separate command for this case
         target = Utils.getRootItem(Utils.getTargetInventory());
         
+        // player's main inventory is child of above root
+        if(target == Utils.getRootItem(WurmHelper.hud.getInventoryWindow().getInventoryListComponent()))
+            targetPlayerInventory();
+        
         if(target != null)
             Utils.consolePrint("New target is %s", target.getDisplayName());
         else
             Utils.consolePrint("Couldn't find any target containers");
+    }
+    
+    private void targetPlayerInventory()
+    {
+        target = Utils.getRootItem(WurmHelper.hud.getInventoryWindow().getInventoryListComponent())
+            .getChildren()
+            .stream()
+            // target specifically the main inventory sub-item, so counting works
+            .filter(item -> item.getBaseName().equals("inventory"))
+            .findFirst()
+            .orElse(null)
+        ;
     }
     
     public void updateSource()
@@ -296,5 +360,31 @@ class ItemSpec
             target.getDisplayName()
         ;
         return String.format("%s => %s", srcName, destName);
+    }
+    
+    public int countTargetQuantity()
+    {
+        if(source == null || target == null)
+            return 0;
+        
+        final String canonicalName = getCanonicalName(source);
+        return Utils.getInventoryItems(
+            target.getChildren(),
+            item -> getCanonicalName(item).contains(canonicalName)
+        ).size();
+    }
+    
+    public static String getCanonicalName(InventoryMetaItem item)
+    {
+        String baseName = item.getBaseName();
+        if(baseName.charAt(baseName.length() - 1) == 's') // BSB items have plurals in all name fields...
+            baseName = baseName.substring(0, baseName.length() - 1);
+        
+        StringBuilder sb = new StringBuilder();
+        if(Options.materialAsSuffix.value())
+            MaterialUtilities.appendNameWithMaterialSuffix(sb, baseName, item.getMaterialId());
+        else
+            MaterialUtilities.appendNameWithMaterial(sb, baseName, item.getMaterialId());
+        return sb.toString();
     }
 }

@@ -496,6 +496,20 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
                 if (BulkItemGetterBot.closeBMLWindow && wc instanceof BmlWindowComponent) {
                     String title = ReflectionUtil.getPrivateField(wc, ReflectionUtil.getField(wc.getClass(), "title"));
                     if (title.equals("Removing items")) {
+                        if(BulkItemGetterBot.moveQuantity > 0)
+                        {
+                            Map<String, Object> inputs = ReflectionUtil.getPrivateField(
+                                wc,
+                                ReflectionUtil.getField(wc.getClass(), "inputFields")
+                            );
+                            Object quantityField = inputs.values().iterator().next();
+                            ReflectionUtil.setPrivateField(
+                                quantityField,
+                                ReflectionUtil.getField(quantityField.getClass(), "input"),
+                                String.format("%d", BulkItemGetterBot.moveQuantity)
+                            );
+                        }
+                        
                         Method clickButton = ReflectionUtil.getMethod(wc.getClass(), "processButtonPressed");
                         clickButton.setAccessible(true);
                         clickButton.invoke(wc, "submit");
