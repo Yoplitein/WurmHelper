@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 public class Utils {
     //used to synchronize server calls
@@ -419,14 +419,18 @@ public class Utils {
         return null;
     }
 
-    public static WurmComponent getTargetComponent(Function<WurmComponent, Boolean> filter) {
-        int x = WurmHelper.hud.getWorld().getClient().getXMouse();
-        int y = WurmHelper.hud.getWorld().getClient().getYMouse();
+    public static WurmComponent getTargetComponent(Predicate<WurmComponent> filter) {
+        final int x = WurmHelper.hud.getWorld().getClient().getXMouse();
+        final int y = WurmHelper.hud.getWorld().getClient().getYMouse();
+        return getComponentAtPoint(x, y, filter);
+    }
+    
+    public static WurmComponent getComponentAtPoint(int x, int y, Predicate<WurmComponent> filter) {
         try {
             for (int i = 0; i < WurmHelper.getInstance().components.size(); i++) {
                 WurmComponent wurmComponent = WurmHelper.getInstance().components.get(i);
                 if (wurmComponent.contains(x, y)) {
-                    if (filter != null && !filter.apply(wurmComponent))
+                    if (filter != null && !filter.test(wurmComponent))
                         continue;
                     return wurmComponent;
                 }
@@ -436,6 +440,42 @@ public class Utils {
             Utils.consolePrint( e.toString());
         }
         return null;
+    }
+    
+    public static InventoryListComponent getInventoryForComponent(WurmComponent component) {
+        if(component == null) {
+            Utils.consolePrint("Couldn't find an open container under the cursor");
+            return null;
+        }
+        
+        InventoryListComponent invComponent;
+        try {
+            invComponent = ReflectionUtil.getPrivateField(
+                component,
+                ReflectionUtil.getField(component.getClass(), "component")
+            );
+        } catch(Exception err) {
+            Utils.consolePrint("Couldn't get container's ListComponent");
+            err.printStackTrace();
+            return null;
+        }
+        if(Utils.getRootItem(invComponent) == null) {
+            Utils.consolePrint("Found a ListComponent but it has no root item(?!)");
+            return null;
+        }
+        
+        return invComponent;
+    }
+    
+    public static InventoryListComponent getTargetInventory() {
+        final int x = WurmHelper.hud.getWorld().getClient().getXMouse();
+        final int y = WurmHelper.hud.getWorld().getClient().getYMouse();
+        return getInventoryAtPoint(x, y);
+    }
+    
+    public static InventoryListComponent getInventoryAtPoint(int x, int y) {
+        WurmComponent invWindow = Utils.getComponentAtPoint(x, y, c -> c instanceof ItemListWindow || c instanceof InventoryWindow);
+        return invWindow == null ? null : getInventoryForComponent(invWindow);
     }
 
     public static int[][] getAreaCoordinates() {
