@@ -107,7 +107,6 @@ public class PileCollector extends Bot {
                     Map<Boolean, List<InventoryMetaItem>> splitItems = targetItems
                         .stream()
                         .collect(Collectors.partitioningBy(item ->
-                            item.getBaseName().equals(targetItemName) &&
                             item.getRarity() == 0 &&
                             item.getQuality() >= minQuality
                         ))
