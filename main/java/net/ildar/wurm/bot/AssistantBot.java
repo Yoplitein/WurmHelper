@@ -17,6 +17,7 @@ import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
+import com.wurmonline.mesh.Tiles.Tile;
 import com.wurmonline.shared.constants.PlayerAction;
 
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
@@ -76,6 +77,7 @@ public class AssistantBot extends Bot {
     
     private boolean burying;
     private long shovel = -10;
+    private long pickaxe = -10;
     private boolean buryAll;
     private long buryDelay = 2500;
     private HashMap<Long, Long> corpseTimes = new HashMap<>();
@@ -328,9 +330,10 @@ public class AssistantBot extends Bot {
                 
                 if (burying && shovel > 0) {
                     List<GroundItemCellRenderable> corpses = findCorpses(
-                        (item, data) -> !butchering || data.getModelName().toString().toLowerCase().contains("butchered")
+                        (item, data) ->
+                            (!butchering || data.getModelName().toString().toLowerCase().contains("butchered")) &&
+                            (pickaxe > 0 || !needsPickaxeToBury(item))
                     );
-                    
                     final long now = System.currentTimeMillis();
                     int actions = 0;
                     for (GroundItemCellRenderable item: corpses) {
@@ -339,7 +342,7 @@ public class AssistantBot extends Bot {
                         
                         if (now - corpseTimes.get(id) > buryDelay) {
                             WurmHelper.hud.getWorld().getServerConnection().sendAction(
-                                shovel,
+                                needsPickaxeToBury(item) ? pickaxe : shovel,
                                 new long[]{item.getId()},
                                 buryAll ? PlayerAction.BURY_ALL : PlayerAction.BURY
                             );
@@ -842,7 +845,8 @@ public class AssistantBot extends Bot {
                 return;
             }
             butcheringKnife = item.getId();
-        }
+        } else
+            butcheringKnife = -10;
     }
     
     private void toggleBurying() {
@@ -865,8 +869,17 @@ public class AssistantBot extends Bot {
             }
             shovel = item.getId();
             
+            item = Utils.locateToolItem("pickaxe");
+            if(item == null)
+                Utils.consolePrint("Couldn't find a pickaxe, bot will be unable to bury on rock");
+            else
+                pickaxe = item.getId();
+            
             buryAll = false;
             toggleBuryAll(); // notify user that bury all is default
+        } else {
+            shovel = -10;
+            pickaxe = -10;
         }
     }
     
@@ -946,6 +959,25 @@ public class AssistantBot extends Bot {
             Math.pow(py - item.getYPos(), 2f)
         ;
         return sqDist < maxCorpseSqDistance;
+    }
+    
+    private boolean needsPickaxeToBury(GroundItemCellRenderable item) {
+        if (item.getLayer() < 0)
+            return true;
+        final byte tileID = WurmHelper
+            .hud
+            .getWorld()
+            .getNearTerrainBuffer()
+            .getTileType(
+                (int)(item.getXPos() / 4f),
+                (int)(item.getYPos() / 4f)
+            )
+            .id
+        ;
+        return
+            tileID == Tile.TILE_ROCK.id ||
+            tileID == Tile.TILE_CLIFF.id
+        ;
     }
     
     private enum InputKey implements Bot.InputKey {
