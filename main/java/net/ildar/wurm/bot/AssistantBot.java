@@ -1,20 +1,29 @@
 package net.ildar.wurm.bot;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.InputMismatchException;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiPredicate;
+import java.util.stream.Collectors;
+
+import com.wurmonline.client.comm.ServerConnectionListenerClass;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
 import com.wurmonline.shared.constants.PlayerAction;
-import net.ildar.wurm.WurmHelper;
-import net.ildar.wurm.Utils;
-import net.ildar.wurm.annotations.BotInfo;
+
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
-import java.util.Comparator;
-import java.util.InputMismatchException;
-import java.util.List;
-import java.util.stream.Collectors;
+import net.ildar.wurm.Utils;
+import net.ildar.wurm.WurmHelper;
+import net.ildar.wurm.annotations.BotInfo;
 
 @BotInfo(description =
         "Assists player in various ways",
@@ -61,6 +70,15 @@ public class AssistantBot extends Bot {
     private long lastSacrifice;
     private long sacrificeTimeout;
     private boolean successfullStartOfSacrificing;
+    
+    private boolean butchering;
+    private long butcheringKnife = -10;
+    
+    private boolean burying;
+    private long shovel = -10;
+    private boolean buryAll;
+    private long buryDelay = 2500;
+    private HashMap<Long, Long> corpseTimes = new HashMap<>();
 
     private boolean kindlingBurning;
     private long forgeId;
@@ -91,6 +109,10 @@ public class AssistantBot extends Bot {
         registerInputHandler(AssistantBot.InputKey.l, input -> toggleLockpicking(0));
         registerInputHandler(AssistantBot.InputKey.lt, this::setLockpickingTimeout);
         registerInputHandler(AssistantBot.InputKey.lid, this::toggleLockpickingByTargetId);
+        registerInputHandler(AssistantBot.InputKey.b, input -> toggleButchering());
+        registerInputHandler(AssistantBot.InputKey.bu, input -> toggleBurying());
+        registerInputHandler(AssistantBot.InputKey.bua, input -> toggleBuryAll());
+        registerInputHandler(AssistantBot.InputKey.bud, this::setBuryDelay);
         registerInputHandler(AssistantBot.InputKey.v, input -> toggleVerbosity());
     }
 
@@ -99,9 +121,10 @@ public class AssistantBot extends Bot {
         registerEventProcessors();
         CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
         Object progressBar = ReflectionUtil.getPrivateField(creationWindow, ReflectionUtil.getField(creationWindow.getClass(), "progressBar"));
+        final int maxActions = Utils.getMaxActionNumber();
         while (isActive()) {
             waitOnPause();
-            float progress = ReflectionUtil.getPrivateField(progressBar, ReflectionUtil.getField(progressBar.getClass(), "progress"));
+            final float progress = ReflectionUtil.getPrivateField(progressBar, ReflectionUtil.getField(progressBar.getClass(), "progress"));
             if (progress == 0f && creationWindow.getActionInUse() == 0){
                 if (casting) {
                     float favor = WurmHelper.hud.getWorld().getPlayer().getSkillSet().getSkillValue("favor");
@@ -280,6 +303,63 @@ public class AssistantBot extends Bot {
                             successfullStartOfBurning = true;
                         }
                     }
+                }
+                
+                if (butchering && butcheringKnife > 0) {
+                    List<GroundItemCellRenderable> corpses = findCorpses(
+                        (item, data) -> !data.getModelName().toString().toLowerCase().contains("butchered")
+                    );
+                    
+                    int actions = 0;
+                    for (GroundItemCellRenderable corpse: corpses) {
+                        WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                            butcheringKnife,
+                            new long[]{corpse.getId()},
+                            PlayerAction.BUTCHER
+                        );
+                        
+                        if (++actions >= maxActions)
+                            break;
+                    }
+                } else if (butchering) {
+                    Utils.consolePrint("Don't have a butchering knife to butcher with!");
+                    butchering = false;
+                }
+                
+                if (burying && shovel > 0) {
+                    List<GroundItemCellRenderable> corpses = findCorpses(
+                        (item, data) -> !butchering || data.getModelName().toString().toLowerCase().contains("butchered")
+                    );
+                    
+                    final long now = System.currentTimeMillis();
+                    int actions = 0;
+                    for (GroundItemCellRenderable item: corpses) {
+                        final long id = item.getId();
+                        corpseTimes.putIfAbsent(id, now);
+                        
+                        if (now - corpseTimes.get(id) > buryDelay) {
+                            WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                                shovel,
+                                new long[]{item.getId()},
+                                buryAll ? PlayerAction.BURY_ALL : PlayerAction.BURY
+                            );
+                        }
+                        
+                        if (++actions >= maxActions)
+                            break;
+                    }
+                    
+                    corpseTimes
+                        .entrySet()
+                        .stream()
+                        .filter(e -> now - e.getValue() > 3 * buryDelay)
+                        .map(e -> e.getKey())
+                        .collect(Collectors.toList())
+                        .forEach(id -> corpseTimes.remove(id))
+                    ;
+                } else if (burying) {
+                    Utils.consolePrint("Don't have a shovel to bury with!");
+                    burying = false;
                 }
             }
             sleep(timeout);
@@ -743,6 +823,77 @@ public class AssistantBot extends Bot {
         } else
             Utils.consolePrint("Drinking is off!");
     }
+    
+    private void toggleButchering() {
+        butchering ^= true;
+        Utils.consolePrint(
+            "Bot will%s butcher corpses",
+            butchering ?
+                "" :
+                " no longer"
+        );
+        
+        if (butchering) {
+            InventoryMetaItem item = Utils.locateToolItem("butchering knife");
+            if(item == null)
+            {
+                Utils.consolePrint("Couldn't find a butchering knife, butchering is disabled.");
+                butchering = false;
+                return;
+            }
+            butcheringKnife = item.getId();
+        }
+    }
+    
+    private void toggleBurying() {
+        burying ^= true;
+        corpseTimes.clear();
+        Utils.consolePrint(
+            "Bot will%s bury corpses",
+            burying ?
+                "" :
+                " no longer"
+        );
+        
+        if (burying) {
+            InventoryMetaItem item = Utils.locateToolItem("shovel");
+            if(item == null)
+            {
+                Utils.consolePrint("Couldn't find a shovel, burying is disabled.");
+                burying = false;
+                return;
+            }
+            shovel = item.getId();
+            
+            buryAll = false;
+            toggleBuryAll(); // notify user that bury all is default
+        }
+    }
+    
+    private void toggleBuryAll() {
+        buryAll ^= true;
+        Utils.consolePrint(
+            "Bot will use %s",
+            buryAll ?
+                "\"Bury all\" action" :
+                "use normal bury action (items will spill onto ground!)"
+        );
+    }
+    
+    private void setBuryDelay(String[] input) {
+        if (input == null || input.length == 0) {
+            printInputKeyUsageString(AssistantBot.InputKey.bud);
+            return;
+        }
+        
+        try {
+            long newBuryDelay = Long.parseLong(input[0]);
+            buryDelay = Math.max(0, newBuryDelay);
+            Utils.consolePrint("Bot will bury corpses after %d milliseconds", buryDelay);
+        } catch (NumberFormatException e) {
+            Utils.consolePrint("`%s` is not an integer");
+        }
+    }
 
     private void toggleVerbosity() {
         verbose = !verbose;
@@ -750,9 +901,53 @@ public class AssistantBot extends Bot {
             Utils.consolePrint("Verbose mode is on!");
         else
             Utils.consolePrint("Verbose mode is off!");
-
     }
-
+    
+    private List<GroundItemCellRenderable> findCorpses(BiPredicate<GroundItemCellRenderable, GroundItemData> predicate) {
+        predicate = ((BiPredicate<GroundItemCellRenderable, GroundItemData>)this::isCorpse)
+            .and(this::isNearby)
+            .and(predicate)
+        ;
+        
+        List<GroundItemCellRenderable> items = new ArrayList<>();
+        try {
+            ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
+            Map<Long, GroundItemCellRenderable> groundItemsMap = ReflectionUtil.getPrivateField(sscc,
+                        ReflectionUtil.getField(sscc.getClass(), "groundItems"));
+            
+            for(GroundItemCellRenderable item: groundItemsMap.values()) {
+                GroundItemData data;
+                try {
+                    data = ReflectionUtil.getPrivateField(item, ReflectionUtil.getField(item.getClass(), "item"));
+                } catch (Exception e) {
+                    Utils.consolePrint(e.toString());
+                    continue;
+                }
+                
+                if(predicate.test(item, data))
+                    items.add(item);
+            }
+        } catch (Exception e) {
+            Utils.consolePrint(e.toString());
+        }
+        return items;
+    }
+    
+    private boolean isCorpse(GroundItemCellRenderable item, GroundItemData data) {
+        return item.getHoverName().toLowerCase().startsWith("corpse of");
+    }
+    
+    private static final float maxCorpseSqDistance = 4 * 4;
+    private boolean isNearby(GroundItemCellRenderable item, GroundItemData data) {
+        final float px = WurmHelper.hud.getWorld().getPlayerPosX();
+        final float py = WurmHelper.hud.getWorld().getPlayerPosY();
+        final double sqDist =
+            Math.pow(px - item.getXPos(), 2f) +
+            Math.pow(py - item.getYPos(), 2f)
+        ;
+        return sqDist < maxCorpseSqDistance;
+    }
+    
     private enum InputKey implements Bot.InputKey {
         w("Toggle automatic drinking of the liquid the user pointing at", ""),
         wid("Toggle automatic drinking of liquid with provided id", "id"),
@@ -777,6 +972,10 @@ public class AssistantBot extends Bot {
         l("Toggle automatic lockpicking. The target chest should be beneath the user's mouse", ""),
         lt("Change the timeout between lockpickings", "timeout(in milliseconds)"),
         lid("Toggle automatic lockpicking of target chest with provided id", "id"),
+        b("Toggle butchering of corpses on the ground", ""),
+        bu("Toggle burying of corpses on the ground", ""),
+        bua("Toggle burying corpses with normal bury action vs bury all", ""),
+        bud("Set delay before burying corpses (to allow other bots time to move items)", "msecs"),
         v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", "");
 
         private String description;
