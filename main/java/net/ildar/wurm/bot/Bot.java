@@ -41,6 +41,7 @@ public abstract class Bot extends Thread {
         } catch (Exception e) {
             Utils.consolePrint(this.getClass().getSimpleName() + " has encountered an error - " + e.getMessage());
             Utils.consolePrint(e.toString());
+            e.printStackTrace();
         }
         unregisterMessageProcessors();
         BotController.getInstance().onBotInterruption(this);
