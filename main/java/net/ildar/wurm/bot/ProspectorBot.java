@@ -9,8 +9,6 @@ import net.ildar.wurm.Utils;
 import net.ildar.wurm.annotations.BotInfo;
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
-import java.util.InputMismatchException;
-
 @BotInfo(description =
         "Prospects selected tile",
         abbreviation = "pr")
@@ -90,7 +88,7 @@ public class ProspectorBot extends Bot {
         }
         try {
             setClicks(Integer.parseInt(input[0]));
-        } catch (InputMismatchException e) {
+        } catch (NumberFormatException e) {
             Utils.consolePrint("Bad value!");
         }
     }

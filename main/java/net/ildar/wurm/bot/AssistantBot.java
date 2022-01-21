@@ -3,7 +3,6 @@ package net.ildar.wurm.bot;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiPredicate;
@@ -492,7 +491,7 @@ public class AssistantBot extends Bot {
         if (kindlingBurning) {
             try {
                 changeKinglingBurnsTimeout(Integer.parseInt(input[0]));
-            } catch (InputMismatchException e) {
+            } catch (NumberFormatException e) {
                 Utils.consolePrint("Wrong timeout value!");
             }
         } else {
@@ -517,7 +516,7 @@ public class AssistantBot extends Bot {
         if (praying) {
             try {
                 changePrayerTimeout(Integer.parseInt(input[0]));
-            } catch (InputMismatchException e) {
+            } catch (NumberFormatException e) {
                 Utils.consolePrint("Wrong timeout value!");
             }
         } else {
@@ -542,7 +541,7 @@ public class AssistantBot extends Bot {
         if (trashCleaning) {
             try {
                 changeTrashCleaningTimeout(Integer.parseInt(input[0]));
-            } catch (InputMismatchException e) {
+            } catch (NumberFormatException e) {
                 Utils.consolePrint("Wrong timeout value!");
             }
         } else {
@@ -567,7 +566,7 @@ public class AssistantBot extends Bot {
         if (sacrificing) {
             try {
                 changeSacrificeTimeout(Integer.parseInt(input[0]));
-            } catch (InputMismatchException e) {
+            } catch (NumberFormatException e) {
                 Utils.consolePrint("Wrong timeout value!");
             }
         } else {
@@ -592,7 +591,7 @@ public class AssistantBot extends Bot {
         if (lockpicking) {
             try {
                 changeLockpickingTimeout(Integer.parseInt(input[0]));
-            } catch (InputMismatchException e) {
+            } catch (NumberFormatException e) {
                 Utils.consolePrint("Wrong timeout value!");
             }
         } else {

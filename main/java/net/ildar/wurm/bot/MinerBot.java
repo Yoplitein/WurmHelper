@@ -477,7 +477,7 @@ public class MinerBot extends Bot {
             if (n > 10) n = 10;
             clicks = n;
             Utils.consolePrint(getClass().getSimpleName() + " will do " + clicks + " clicks each time");
-        } catch (InputMismatchException e) {
+        } catch (NumberFormatException e) {
             Utils.consolePrint("Bad value!");
         }
     }
