@@ -1,5 +1,6 @@
 package net.ildar.wurm;
 
+import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.SkillLogicSet;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.gui.*;
@@ -595,6 +596,11 @@ public class Utils {
             return 0;
         }
         return mlc.getMaxNumberOfActions();
+    }
+    
+    public static float getPlayerStamina() {
+        final PlayerObj ply = WurmHelper.hud.getWorld().getPlayer();
+        return ply.getStamina() + ply.getDamage();
     }
 
     public static void writeToConsoleInputLine(String s) {

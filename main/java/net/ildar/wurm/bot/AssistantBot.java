@@ -63,6 +63,8 @@ public class AssistantBot extends Bot {
     private long altarId;
     private long lastPrayer;
     private long prayingTimeout;
+    private int prayCount = 0;
+    private float prayStamina = 0.5f;
     private boolean successfullStartOfPraying;
 
     private boolean sacrificing;
@@ -97,6 +99,8 @@ public class AssistantBot extends Bot {
         registerInputHandler(AssistantBot.InputKey.p, input -> togglePraying(0));
         registerInputHandler(AssistantBot.InputKey.pt, this::setPrayerTimeout);
         registerInputHandler(AssistantBot.InputKey.pid, this::togglePrayingByAltarId);
+        registerInputHandler(AssistantBot.InputKey.ps, this::setPrayerStamina);
+        registerInputHandler(AssistantBot.InputKey.pc, this::setPrayerCount);
         registerInputHandler(AssistantBot.InputKey.s, input -> toggleSacrificing(0));
         registerInputHandler(AssistantBot.InputKey.st, this::setSacrificeTimeout);
         registerInputHandler(AssistantBot.InputKey.sid, this::toggleSacrificingByAltarId);
@@ -250,13 +254,21 @@ public class AssistantBot extends Bot {
                 }
 
                 if (praying) {
-                    if (Math.abs(lastPrayer - System.currentTimeMillis()) > prayingTimeout) {
+                    if (Math.abs(lastPrayer - System.currentTimeMillis()) > prayingTimeout && Utils.getPlayerStamina() >= prayStamina) {
                         lastPrayer = System.currentTimeMillis();
+                        final int numPrayers =
+                            prayCount == 0 ?
+                                // leave a slot free so sacrificing isn't starved (i.e. "too busy" every iteration)
+                                Math.max(1, maxActions - (sacrificing ? 1 : 0)) :
+                                prayCount
+                        ;
                         successfullStartOfPraying = false;
                         int counter = 0;
                         while (praying && !successfullStartOfPraying && counter++ < 50) {
                             if (verbose) Utils.consolePrint("successfullStartOfPraying counter=" + counter);
-                            WurmHelper.hud.sendAction(PlayerAction.PRAY, altarId);
+                            for (int x = 0; x < numPrayers; x++) {
+                                WurmHelper.hud.sendAction(PlayerAction.PRAY, altarId);
+                            }
                             sleep(1000);
                         }
                         successfullStartOfPraying = true;
@@ -531,6 +543,52 @@ public class AssistantBot extends Bot {
         }
         prayingTimeout = timeout;
         Utils.consolePrint("Current prayer timeout is " + prayingTimeout);
+    }
+    
+    private void setPrayerStamina(String[] input) {
+        if (input == null || input.length != 1) {
+            printInputKeyUsageString(AssistantBot.InputKey.ps);
+            return;
+        }
+        
+        if (!praying) {
+            Utils.consolePrint("Automatic praying is off!");
+            return;
+        }
+        
+        try {
+            float newStamina = Float.parseFloat(input[0]);
+            if (newStamina < 0f || newStamina > 1f) {
+                Utils.consolePrint("Stamina must be a number between 0..1");
+                return;
+            }
+            prayStamina = newStamina;
+        } catch(NumberFormatException exception) {
+            Utils.consolePrint("`%s` is not a real number");
+        }
+    }
+    
+    private void setPrayerCount(String[] input) {
+        if (input == null || input.length != 1) {
+            printInputKeyUsageString(AssistantBot.InputKey.pc);
+            return;
+        }
+        
+        if (!praying) {
+            Utils.consolePrint("Automatic praying is off!");
+            return;
+        }
+        
+        try {
+            int newCount = Integer.parseInt(input[0]);
+            if (newCount < 0) {
+                Utils.consolePrint("Prayer count must be a positive integer");
+                return;
+            }
+            prayCount = newCount;
+        } catch(NumberFormatException exception) {
+            Utils.consolePrint("`%s` is not an integer");
+        }
     }
 
     private void setTrashCleaningTimeout(String input[]) {
@@ -988,6 +1046,8 @@ public class AssistantBot extends Bot {
         p("Toggle automatic praying. The timeout between prayers can be configured separately.", ""),
         pt("Change the timeout between prayers", "timeout(in milliseconds)"),
         pid("Toggle automatic praying on altar with provided id", "id"),
+        ps("Set stamina threshold for praying.", "float"),
+        pc("Set number of prayers to be queued. If 0 (default) then max per mind logic.", "integer"),
         s("Toggle automatic sacrificing. The timeout between sacrifices can be configured separately.", ""),
         st("Change the timeout between sacrifices", "timeout(in milliseconds)"),
         sid("Toggle automatic sacrifices at altar with provided id", "id"),
