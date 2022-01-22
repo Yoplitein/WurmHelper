@@ -10,9 +10,6 @@ import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map.Entry;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
 
@@ -43,7 +40,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     int registryPort = 0x2B07;
     
     ArrayBlockingQueue<Runnable> oneshotTasks = new ArrayBlockingQueue<>(32, false);
-    /*Concurrent?*/HashMap<Runnable, Long> scheduledTasks = new HashMap<>();
+    ArrayList<ScheduledTask> scheduledTasks = new ArrayList<>();
     
     // server fields
     ClientSet clients;
@@ -147,7 +144,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     synchronized void schedule(Runnable task, long msecs)
     {
         final long now = System.currentTimeMillis();
-        scheduledTasks.put(task, now + msecs);
+        scheduledTasks.add(new ScheduledTask(task, now + msecs));
         notify();
     }
     
@@ -156,7 +153,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     {
         try
         {
-            ArrayList<Entry<Runnable, Long>> expiredTasks = new ArrayList<>();
+            ArrayList<ScheduledTask> expiredTasks = new ArrayList<>();
             
             while(isActive())
             {
@@ -169,14 +166,14 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     
                         long now = System.currentTimeMillis();
                         expiredTasks.clear();
-                        for(Entry<Runnable, Long> pair: scheduledTasks.entrySet())
-                            if(pair.getValue() <= now)
-                                expiredTasks.add(pair);
-                        
-                        for(Entry<Runnable, Long> pair: expiredTasks)
+                        for(ScheduledTask task: scheduledTasks)
+                            if(task.triggerTime <= now)
+                                // copy tasks so we can remove them while iterating
+                                expiredTasks.add(task);
+                        for(ScheduledTask task: expiredTasks)
                         {
-                            scheduledTasks.remove(pair.getKey());
-                            pair.getKey().run();
+                            scheduledTasks.remove(task);
+                            task.task.run();
                         }
                         
                         // current oneshots may queue subsequent oneshots, but those should be run next iteration
@@ -184,9 +181,9 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                         while(oneshotsToRun-- > 0)
                             oneshotTasks.remove().run();
                         
-                        long nextTaskTime = scheduledTasks
-                            .values()
+                        final long nextTaskTime = scheduledTasks
                             .stream()
+                            .map(task -> task.triggerTime)
                             .min(Comparator.comparingLong(x -> x))
                             .orElse(Long.MAX_VALUE)
                         ;
@@ -196,6 +193,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                             nextTaskTime - now > 0
                         )
                         {
+                            // there should probably be a synchronized block around here
                             wait(Math.max(0, nextTaskTime - now));
                             now = System.currentTimeMillis();
                         }
@@ -740,6 +738,18 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 direction.action
             );
         });
+    }
+}
+
+final class ScheduledTask
+{
+    public Runnable task;
+    public long triggerTime;
+    
+    public ScheduledTask(Runnable task, long triggerTime)
+    {
+        this.task = task;
+        this.triggerTime = triggerTime;
     }
 }
 
