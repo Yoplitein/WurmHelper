@@ -386,6 +386,17 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 );
                 break;
             }
+            
+            // TODO: dispatch console commands (to start/stop other bots, etc.)
+            // @name to run on only one client?
+            // case "exec":
+            
+            // case "select": // TODO: sync everyone's selection (select bar) with server, for commands
+            
+            // TODO: everyone cancels all actions
+            // it might be better to hook into the stop binding directly (somehow) and relay them
+            // case "stop":
+            
             case "attack":
             {
                 PickableUnit unit = world.getCurrentHoveredObject();
@@ -399,6 +410,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 clients.attack(unit.getId());
                 break;
             }
+            
+            // TODO: everyone targets a (random) creature anyone is targeting
+            // perhaps if we can get opponents, pick that of the char with the least health
+            // case "synctarget":
+            
             case "syncpos":
             {
                 syncPosition = !syncPosition;
@@ -425,18 +441,21 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 clients.embark(id);
                 break;
             }
+            
             case "disembark":
             {
                 disembark();
                 clients.disembark();
                 break;
             }
+            
             case "dig":
             {
                 dig();
                 clients.dig();
                 break;
             }
+            
             case "level":
             {
                 PickableUnit unit = world.getCurrentHoveredObject();
@@ -452,11 +471,14 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 
                 break;
             }
+            
             case "mine":
             {
                 final String strDir = args.length >= 2 ? args[1].toLowerCase() : "f";
                 final Direction direction = Direction.getByAbbreviation(strDir);
-                final boolean targetingVertical = strDir.equalsIgnoreCase("v");
+                
+                // vertical mining has its own "direction" to guard against wayward mining actions mucking up e.g. smooth floors
+                final boolean targetingVertical = strDir.equalsIgnoreCase("v"); // what the user *wants* to target
                 
                 if(direction == Direction.UNKNOWN && !targetingVertical)
                 {
@@ -471,8 +493,12 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     return;
                 }
                 
-                // vertical mining has its own "direction" to guard against wayward mining actions mucking up e.g. smooth floors
+                // what the user is *actually* hovering over
                 final boolean targetedVertical = ((CaveWallPicker)unit).getWallId() < 2; // ids 0,1 are floor/ceiling
+                
+                // FIXME: even with this check there's been unwanted floor mining
+                // possibly need to also check on clients, the wall ID may get reused for the floor?
+                // reminder: a similar fix should also apply to MinerBot
                 if(targetingVertical != targetedVertical)
                 {
                     Utils.consolePrint(
@@ -489,6 +515,15 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 clients.mine(wallID, direction);
                 break;
             }
+            
+            // case "eat": // TODO
+            
+            // case "drink": // TODO
+            
+            // TODO: clients answer a question (BML window)
+            // need to investigate whether this is even feasible
+            // case "bml": // maybe "question"
+            
             default:
                 Utils.consolePrint("Unknown subcommand `%s`", args[0]);
         }
