@@ -1,6 +1,7 @@
 package net.ildar.wurm;
 
 import net.ildar.wurm.bot.Bot;
+import net.ildar.wurm.bot.RMIBot;
 
 import java.util.*;
 
@@ -85,8 +86,17 @@ public class BotController {
     }
 
     private synchronized void deactivateAllBots() {
-        List<Bot> bots = new ArrayList<>(activeBots);
-        bots.forEach(Bot::deactivate);
+        List<Bot> bots = new ArrayList<>(activeBots); // deactivation mutates activeBots
+        bots.forEach(bot -> {
+            if((bot instanceof RMIBot))
+                Utils.consolePrint(
+                    "Note: not shutting down %s, use \"%s off\" directly to stop it",
+                    RMIBot.class.getSimpleName(),
+                    getBotRegistration(RMIBot.class).getAbbreviation()
+                );
+            else
+                bot.deactivate();
+        });
     }
 
     public synchronized void onBotInterruption(Bot bot) {
