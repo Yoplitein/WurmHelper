@@ -38,7 +38,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     final HeadsUpDisplay hud = WurmHelper.hud;
     final World world = hud.getWorld();
     
-    static final String registryPrefix = "RMIBot";
+    static final String registryPrefix = RMIBot.class.getSimpleName();
     String registryHost = "127.0.43.7";
     int registryPort = 0x2B07;
     
@@ -74,7 +74,12 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         }
         catch(Exception err)
         {
-            Utils.consolePrint(fmt, err.getClass().getName(), err.getMessage(), args);
+            Utils.consolePrint(
+                String.format("%s: %s", getClass().getSimpleName(), fmt), // preserve format arg numbering
+                err.getClass().getName(),
+                err.getMessage(),
+                args
+            );
             err.printStackTrace();
             return false;
         }
@@ -123,13 +128,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     @Override
     public void setPaused()
     {
-        Utils.consolePrint("RMI bot cannot be paused");
+        Utils.consolePrint("%s cannot be paused", getClass().getSimpleName());
     }
     
     @Override
     public synchronized void setResumed()
     {
-        Utils.consolePrint("RMI bot cannot be paused");
+        Utils.consolePrint("%s cannot be paused", getClass().getSimpleName());
     }
     
     @Override
@@ -174,7 +179,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                             pair.getKey().run();
                         }
                         
-                        int oneshotsToRun = oneshotTasks.size(); // process new tasks next iteration
+                        // current oneshots may queue subsequent oneshots, but those should be run next iteration
+                        int oneshotsToRun = oneshotTasks.size();
                         while(oneshotsToRun-- > 0)
                             oneshotTasks.remove().run();
                         
@@ -185,7 +191,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                             .orElse(Long.MAX_VALUE)
                         ;
                         now = System.currentTimeMillis();
-                        while(oneshotTasks.size() == 0 && nextTaskTime - now > 0)
+                        while(
+                            oneshotTasks.size() == 0 && // don't sleep if there are pending oneshots
+                            nextTaskTime - now > 0
+                        )
                         {
                             wait(Math.max(0, nextTaskTime - now));
                             now = System.currentTimeMillis();
@@ -199,7 +208,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 catch(Exception err)
                 {
                     Utils.consolePrint(
-                        "RMI: Got %s when running tasks: %s",
+                        "%s: Got %s when running tasks: %s",
+                        getClass().getSimpleName(),
                         err.getClass().getName(),
                         err.getMessage()
                     );
@@ -212,7 +222,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             printExceptions(() -> {
                 if(isClient()) toggleClientMode();
                 if(isServer()) toggleServerMode();
-            }, "Got %s when deactivating RMIBot: %s");
+            }, "Got %1$s when deactivating: %2$s");
+            Utils.consolePrint("%s shut down", getClass().getSimpleName());
         }
     }
     
