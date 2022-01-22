@@ -75,6 +75,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         catch(Exception err)
         {
             Utils.consolePrint(fmt, err.getClass().getName(), err.getMessage(), args);
+            err.printStackTrace();
             return false;
         }
     }
@@ -226,14 +227,27 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         if(isServer())
         {
             for(String name: serverRegistry.list())
-                serverRegistry.unbind(name);
+                printExceptions(
+                    () -> serverRegistry.unbind(name),
+                    "Got %1$s when unbinding client %3$s: %2$s",
+                    name
+                );
             
             clients = null;
             
-            serverRegistry.unbind("BotServer");
-            UnicastRemoteObject.unexportObject(this, true);
+            printExceptions(
+                () -> serverRegistry.unbind("BotServer"),
+                "Got %s when unbinding server: %s"
+            );
+            printExceptions(
+                () -> UnicastRemoteObject.unexportObject(this, true),
+                "Got %s when unexporting server: %s"
+            );
             
-            UnicastRemoteObject.unexportObject(serverRegistry, true);
+            printExceptions(
+                () -> UnicastRemoteObject.unexportObject(serverRegistry, true),
+                "Got %s when unexporting registry: %s"
+            );
             serverRegistry = null;
             
             Utils.consolePrint("Server mode disabled, RMI registry shut down");
@@ -266,9 +280,18 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         
         if(isClient())
         {
-            clientRegistry.unbind(regName);
-            UnicastRemoteObject.unexportObject(this, true);
-            ((BotServer)clientRegistry.lookup("BotServer")).onClientLeave(getPlayerName());
+            printExceptions(
+                () -> clientRegistry.unbind(regName),
+                "Got %s when unbinding client: %s"
+            );
+            printExceptions(
+                () -> UnicastRemoteObject.unexportObject(this, true),
+                "Got %s when unexporting client: %s"
+            );
+            printExceptions(
+                () -> ((BotServer)clientRegistry.lookup("BotServer")).onClientLeave(getPlayerName()),
+                "Got %s when notifying server about client disconnect: %s"
+            );
             clientRegistry = null;
             
             Utils.consolePrint("Client mode disabled");
