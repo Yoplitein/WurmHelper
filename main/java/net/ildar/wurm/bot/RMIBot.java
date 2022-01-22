@@ -45,7 +45,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     // server fields
     ClientSet clients;
     Registry serverRegistry;
+    
     boolean syncPosition;
+    boolean syncHeading;
+    long syncDelay = 50;
     
     // client fields
     Registry clientRegistry;
@@ -243,6 +246,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 );
             
             clients = null;
+            syncPosition = false; // kill syncPositionTask
+            syncHeading = false;
             
             printExceptions(
                 () -> serverRegistry.unbind("BotServer"),
@@ -349,7 +354,6 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             Utils.consolePrint("This command can only be used in server mode");
             return;
         }
-        assert clients != null;
         
         if(args == null || args.length == 0)
         {
@@ -369,7 +373,15 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s syncpos -- clients have position and heading continuously synced with master",
+                    "bot %s %s syncpos -- clients have position continuously synced with master",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s synclook -- clients have orientation continuously synced with master",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s synctime -- set interval (msecs) for position/heading synchronization",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
@@ -427,7 +439,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             case "syncpos":
             {
                 syncPosition = !syncPosition;
-                if(syncPosition)
+                if(syncPosition && !syncHeading)
                     execute(this::syncPositionTask);
                 
                 Utils.consolePrint(
@@ -436,6 +448,47 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 );
                 break;
             }
+            
+            case "synclook":
+            {
+                syncHeading = !syncHeading;
+                if(syncHeading && !syncPosition)
+                    execute(this::syncPositionTask);
+                
+                Utils.consolePrint(
+                    "Heading synchronization %s",
+                    syncHeading ? "on" : "off"
+                );
+                break;
+            }
+            
+            case "synctime":
+            {
+                if(args.length < 2)
+                {
+                    Utils.consolePrint("Current sync delay is %dms", syncDelay);
+                    break;
+                }
+                
+                try
+                {
+                    long newDelay = Long.parseLong(args[1]);
+                    if(newDelay <= 0)
+                    {
+                        Utils.consolePrint("Timeout must be > 0!");
+                        break;
+                    }
+                    syncDelay = newDelay;
+                    Utils.consolePrint("Sync delay is now %dms", syncDelay);
+                }
+                catch(NumberFormatException err)
+                {
+                    Utils.consolePrint("`%s` is not an integer", args[1]);
+                    break;
+                }
+                break;
+            }
+            
             case "embark":
             {
                 PickableUnit unit = world.getCurrentHoveredObject();
@@ -610,17 +663,17 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     
     void syncPositionTask()
     {
-        final float px = world.getPlayerPosX();
-        final float py = world.getPlayerPosY();
-        final float rx = world.getPlayerRotX();
-        final float ry = world.getPlayerRotY();
+        final float px = syncPosition ? world.getPlayerPosX() : -1;
+        final float py = syncPosition ? world.getPlayerPosY() : -1;
+        final float rx = syncHeading ? world.getPlayerRotX() : Float.NaN;
+        final float ry = syncHeading ? world.getPlayerRotY() : Float.NaN;
         printExceptions(
             () -> clients.setPosAndHeading(px, py, rx, ry),
             "Got %s when setting clients' position: %s"
         );
         
-        if(syncPosition)
-            schedule(this::syncPositionTask, 100);
+        if(syncPosition || syncHeading)
+            schedule(this::syncPositionTask, syncDelay);
     }
     
     @Override
@@ -653,8 +706,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
     {
         execute(() -> {
-            Utils.movePlayer(x, y);
-            Utils.turnPlayer(rx, ry);
+            if(x >= 0 && y >= 0)
+                Utils.movePlayer(x, y);
+            if(!Float.isNaN(rx) && !Float.isNaN(ry))
+                Utils.turnPlayer(rx, ry);
         });
     }
     
