@@ -9,10 +9,12 @@ import java.rmi.registry.Registry;
 import java.rmi.server.RMISocketFactory;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
 
+import com.wurmonline.client.console.WurmConsole;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
@@ -65,7 +67,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         return clientRegistry != null;
     }
     
-    boolean printExceptions(ThrowingRunnable fn, String fmt, Object... args)
+    static boolean printExceptions(ThrowingRunnable fn, String fmt, Object... args)
     {
         try
         {
@@ -75,7 +77,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         catch(Exception err)
         {
             Utils.consolePrint(
-                String.format("%s: %s", getClass().getSimpleName(), fmt), // preserve format arg numbering
+                String.format("%s: %s", RMIBot.class.getSimpleName(), fmt), // preserve format arg numbering
                 err.getClass().getName(),
                 err.getMessage(),
                 args
@@ -369,6 +371,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 final String cmdKeyword = Inputs.sr.getName();
                 
                 Utils.consolePrint(
+                    "bot %s %s exec [@characterName] <cmd1 [\\; cmd2...]> -- clients (or only named client,) but not master, execute given commands",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
                     "bot %s %s attack -- clients (+ master) target hovered creature",
                     botKeyword, cmdKeyword
                 );
@@ -408,9 +414,44 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 break;
             }
             
-            // TODO: dispatch console commands (to start/stop other bots, etc.)
-            // @name to run on only one client?
-            // case "exec":
+            case "exec":
+            {
+                String[] cmdBits = Arrays.copyOfRange(args, 1, args.length);
+                String target = null;
+                
+                if(cmdBits.length > 0 && cmdBits[0].startsWith("@"))
+                {
+                    target = cmdBits[0].substring(1).toLowerCase();
+                    cmdBits = Arrays.copyOfRange(cmdBits, 1, cmdBits.length);
+                }
+                
+                if(cmdBits.length == 0 || target != null && target.length() == 0)
+                {
+                    Utils.consolePrint("Bad arguments");
+                    break;
+                }
+                
+                String[] commands = String.join(" ", cmdBits).split("(?<!#)#(?!#)");
+                for(int index = 0; index < commands.length; index++)
+                    commands[index] = commands[index].replace("##", "#");
+                
+                if(target == null)
+                    clients.execCmds(commands);
+                else
+                {
+                    boolean found = false;
+                    for(BotClient remote: clients.remotes)
+                        if(remote.getPlayerName().equalsIgnoreCase(target))
+                        {
+                            found = true;
+                            remote.execCmds(commands);
+                        }
+                    
+                    if(!found)
+                        Utils.consolePrint("Couldn't find a player with name `%s`", target);
+                }
+                break;
+            }
             
             // case "select": // TODO: sync everyone's selection (select bar) with server, for commands
             
@@ -701,7 +742,15 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     {
         return world.getPlayer().getPlayerName();
     }
-
+    
+    @Override
+    public void execCmds(String[] cmds) throws RemoteException
+    {
+        WurmConsole console = WurmHelper.hud.getWorld().getClient().getConsole();
+        for(int index = 0; index < cmds.length; index++)
+            console.handleInput(cmds[index], false);
+    }
+    
     @Override
     public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
     {
@@ -818,6 +867,7 @@ interface BotClient extends Remote
 {
     String getPlayerName() throws RemoteException;
     
+    void execCmds(String[] consoleCommands) throws RemoteException;
     void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException;
     void embark(long vehicleID) throws RemoteException;
     void disembark(/* tile ID? */) throws RemoteException;
@@ -830,7 +880,7 @@ interface BotClient extends Remote
 
 final class ClientSet implements BotClient
 {
-    ArrayList<BotClient> remotes = new ArrayList<>();
+    public ArrayList<BotClient> remotes = new ArrayList<>();
     
     public void refreshRemotes(Registry registry) throws Exception
     {
@@ -856,7 +906,14 @@ final class ClientSet implements BotClient
         
         return String.join(", ", names);
     }
-
+    
+    @Override
+    public void execCmds(String[] commands) throws RemoteException
+    {
+        for(BotClient remote: remotes)
+            remote.execCmds(commands);
+    }
+    
     @Override
     public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
     {
