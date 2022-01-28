@@ -708,7 +708,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     break;
                 }
                 
-                clients.genericAction((short)182, targets[0]); // no PlayerAction constant for eat/drink for some reason
+                genericAction((short)182, targets[0]); // no PlayerAction constant for eat/drink for some reason
                 clients.genericAction((short)182, targets[0]);
                 break;
             }
