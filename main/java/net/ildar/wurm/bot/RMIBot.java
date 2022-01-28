@@ -368,8 +368,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             return;
         }
         
-        final int mouseX = WurmHelper.hud.getWorld().getClient().getXMouse();
-        final int mouseY = WurmHelper.hud.getWorld().getClient().getYMouse();
+        final int mouseX = world.getClient().getXMouse();
+        final int mouseY = world.getClient().getYMouse();
         final PickableUnit hoveredUnit = world.getCurrentHoveredObject();
         
         switch(args[0].toLowerCase())
@@ -501,7 +501,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     break;
                 }
                 
-                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                long[] targets = hud.getCommandTargetsFrom(mouseX, mouseY);
                 if(targets == null || targets.length == 0)
                 {
                     if(hoveredUnit != null)
@@ -681,7 +681,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "eat":
             {
-                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                long[] targets = hud.getCommandTargetsFrom(mouseX, mouseY);
                 if(targets == null || targets.length == 0)
                 {
                     Utils.consolePrint("Not hovering over any items");
@@ -695,7 +695,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "drink":
             {
-                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                long[] targets = hud.getCommandTargetsFrom(mouseX, mouseY);
                 if(targets == null || targets.length == 0)
                 {
                     if(hoveredUnit != null && (hoveredUnit instanceof TilePicker))
@@ -856,7 +856,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     @Override
     public void execCmds(String[] cmds) throws RemoteException
     {
-        WurmConsole console = WurmHelper.hud.getWorld().getClient().getConsole();
+        WurmConsole console = world.getClient().getConsole();
         for(int index = 0; index < cmds.length; index++)
             console.handleInput(cmds[index], false);
     }
@@ -865,7 +865,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     public void genericAction(short actionID, long targetID) throws RemoteException
     {
         PlayerAction action = new PlayerAction(actionID, PlayerAction.ANYTHING, "", false);
-        WurmHelper.hud.sendAction(action, targetID);
+        hud.sendAction(action, targetID);
     }
     
     @Override
@@ -919,8 +919,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 shovelID = tool.getId();
         }
         
-        final int tx = Math.round(WurmHelper.hud.getWorld().getPlayerPosX() / 4);
-        final int ty = Math.round(WurmHelper.hud.getWorld().getPlayerPosY() / 4);
+        final int tx = Math.round(world.getPlayerPosX() / 4);
+        final int ty = Math.round(world.getPlayerPosY() / 4);
         final long tileID = Tiles.getTileId(tx, ty, 0);
         world.getServerConnection().sendAction(shovelID, new long[]{tileID}, PlayerAction.DIG);
     }
@@ -966,7 +966,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     {
         try
         {
-            CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
+            CreationWindow creationWindow = hud.getCreationWindow();
             CreationFrame source = ReflectionUtil.getPrivateField(
                 creationWindow,
                 ReflectionUtil.getField(creationWindow.getClass(), "source")
