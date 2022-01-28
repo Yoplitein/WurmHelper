@@ -1,8 +1,10 @@
 package net.ildar.wurm;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
+import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.*;
 import com.wurmonline.client.util.Computer;
 import com.wurmonline.mesh.Tiles;
@@ -181,7 +183,11 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
     private void printItemInformation() {
         WurmComponent inventoryComponent = Utils.getTargetComponent(c -> c instanceof ItemListWindow || c instanceof InventoryWindow);
         if (inventoryComponent == null) {
-            Utils.consolePrint("Didn't find an inventory");
+            final PickableUnit unit = hud.getWorld().getCurrentHoveredObject();
+            if(unit != null && (unit instanceof GroundItemCellRenderable))
+                printGroundItemInfo((GroundItemCellRenderable)unit);
+            else
+                Utils.consolePrint("Not hovering over any inventory or ground item");
             return;
         }
         InventoryListComponent ilc;
@@ -271,6 +277,27 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         Utils.consolePrint(" Custom name:" + item.getCustomName() + " Group name:" + item.getGroupName() + " Display name:" + item.getDisplayName());
         Utils.consolePrint(" Type:" + item.getType() + " Type bits:" + item.getTypeBits() + " Parent id:" + item.getParentId());
         Utils.consolePrint(" Color override:" + item.isColorOverride() + " Marked for update:" + item.isMarkedForUpdate() + " Unfinished:" + item.isUnfinished());
+    }
+    
+    private void printGroundItemInfo(GroundItemCellRenderable item) {
+        GroundItemData data;
+        try {
+            data = ReflectionUtil.getPrivateField(item, ReflectionUtil.getField(item.getClass(), "item"));
+        } catch(Exception err) {
+            Utils.consolePrint("Couldn't get GroundItemData for item %s");
+            return;
+        }
+        
+        Utils.consolePrint("Ground item \"%s\" (\"%s\") with id %d", data.getName(), data.getHoverText(), item.getId());
+        Utils.consolePrint(" Position: %.3f,%.3f (height %.3f) in layer %d", item.getXPos(), item.getYPos(), item.getHPos(), item.getLayer());
+        Utils.consolePrint(" Distance from player: %.3fm", item.getLengthFromPlayer());
+        Utils.consolePrint(" Color: %d,%d,%d",
+            (int)(255 * data.getR()) & 0xFF,
+            (int)(255 * data.getG()) & 0xFF,
+            (int)(255 * data.getB()) & 0xFF
+        );
+        Utils.consolePrint(" Model name: %s", data.getModelName());
+        Utils.consolePrint(" Description: \"%s\"", data.getDescription());
     }
 
     private void handleMtsCommand(String []input) {
