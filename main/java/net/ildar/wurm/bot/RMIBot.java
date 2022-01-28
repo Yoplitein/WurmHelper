@@ -21,6 +21,7 @@ import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cave.CaveWallPicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
+import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
@@ -363,6 +364,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             return;
         }
         
+        final int mouseX = WurmHelper.hud.getWorld().getClient().getXMouse();
+        final int mouseY = WurmHelper.hud.getWorld().getClient().getYMouse();
+        final PickableUnit hoveredUnit = world.getCurrentHoveredObject();
+        
         switch(args[0].toLowerCase())
         {
             case "help":
@@ -375,7 +380,11 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s attack -- clients (+ master) target hovered creature",
+                    "bot %s %s action <action id> <target id> -- everyone performs action on target",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s attack -- everyone targets hovered creature",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
@@ -395,20 +404,32 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s disembark -- clients (+ master) disembark their current vehicle",
+                    "bot %s %s disembark -- everyone disembarks their current vehicle",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s dig -- clients shovel up resources",
+                    "bot %s %s dig -- everyone shovels up resources",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s level -- clients level out hovered tile",
+                    "bot %s %s level -- everyone levels out hovered tile",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s mine <f/u/d/v> -- clients mine hovered wall in specified direction " +
+                    "bot %s %s mine <f/u/d/v> -- everyone mines hovered wall in specified direction " +
                     "(as in MinerBot, or floor/ceiling with `v`)",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s eat -- everyone eats the hovered food item",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s drink -- everyone drinks the hovered water tile/item",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s addtocrafting -- everyone adds the hovered item to crafting window",
                     botKeyword, cmdKeyword
                 );
                 break;
@@ -453,6 +474,41 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 break;
             }
             
+            case "action":
+            {
+                if(args.length < 2)
+                {
+                    
+                    return;
+                }
+                
+                short actionID;
+                try
+                {
+                    actionID = Short.parseShort(args[1]);
+                }
+                catch(NumberFormatException err)
+                {
+                    Utils.consolePrint("`%s` is not a 16 bit integer", args[1]);
+                    break;
+                }
+                
+                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                if(targets == null || targets.length == 0)
+                {
+                    if(hoveredUnit != null)
+                        targets = new long[]{hoveredUnit.getId()};
+                    else
+                    {
+                        Utils.consolePrint("Not hovering over any item/creature/tile");
+                        break;
+                    }
+                }
+                
+                genericAction(actionID, targets[0]);
+                clients.genericAction(actionID, targets[0]);
+            }
+            
             // case "select": // TODO: sync everyone's selection (select bar) with server, for commands
             
             // TODO: everyone cancels all actions
@@ -461,15 +517,14 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "attack":
             {
-                PickableUnit unit = world.getCurrentHoveredObject();
-                if(unit == null || !(unit instanceof CreatureCellRenderable))
+                if(hoveredUnit == null || !(hoveredUnit instanceof CreatureCellRenderable))
                 {
                     Utils.consolePrint("Not hovering over creature");
                     break;
                 }
                 
-                attack(unit.getId());
-                clients.attack(unit.getId());
+                attack(hoveredUnit.getId());
+                clients.attack(hoveredUnit.getId());
                 break;
             }
             
@@ -532,14 +587,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "embark":
             {
-                PickableUnit unit = world.getCurrentHoveredObject();
-                if(unit == null || !(unit instanceof CreatureCellRenderable))
+                if(hoveredUnit == null || !(hoveredUnit instanceof CreatureCellRenderable))
                 {
                     Utils.consolePrint("Not hovering over vehicle");
                     break;
                 }
                 
-                long id = unit.getId();
+                long id = hoveredUnit.getId();
                 hud.sendAction(PlayerAction.EMBARK_DRIVER, id);
                 clients.embark(id);
                 break;
@@ -561,14 +615,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "level":
             {
-                PickableUnit unit = world.getCurrentHoveredObject();
-                if(unit == null || !(unit instanceof TilePicker))
+                if(hoveredUnit == null || !(hoveredUnit instanceof TilePicker))
                 {
                     Utils.consolePrint("Not hovering over any tile");
                     return;
                 }
                 
-                final long tileID = unit.getId();
+                final long tileID = hoveredUnit.getId();
                 level(tileID);
                 clients.level(tileID);
                 
@@ -589,15 +642,14 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     return;
                 }
                 
-                PickableUnit unit = world.getCurrentHoveredObject();
-                if(unit == null || !(unit instanceof CaveWallPicker))
+                if(hoveredUnit == null || !(hoveredUnit instanceof CaveWallPicker))
                 {
                     Utils.consolePrint("Not hovering over any cave tile");
                     return;
                 }
                 
                 // what the user is *actually* hovering over
-                final boolean targetedVertical = ((CaveWallPicker)unit).getWallId() < 2; // ids 0,1 are floor/ceiling
+                final boolean targetedVertical = ((CaveWallPicker)hoveredUnit).getWallId() < 2; // ids 0,1 are floor/ceiling
                 
                 // FIXME: even with this check there's been unwanted floor mining
                 // possibly need to also check on clients, the wall ID may get reused for the floor?
@@ -613,19 +665,62 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     return;
                 }
                 
-                final long wallID = unit.getId();
+                final long wallID = hoveredUnit.getId();
                 mine(wallID, direction);
                 clients.mine(wallID, direction);
                 break;
             }
             
-            // case "eat": // TODO
+            case "eat":
+            {
+                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                if(targets == null || targets.length == 0)
+                {
+                    Utils.consolePrint("Not hovering over any items");
+                    break;
+                }
+                
+                clients.genericAction((short)182, targets[0]); // no PlayerAction constant for eat/drink for some reason
+                clients.genericAction((short)182, targets[0]);
+                break;
+            }
             
-            // case "drink": // TODO
+            case "drink":
+            {
+                long[] targets = WurmHelper.hud.getCommandTargetsFrom(mouseX, mouseY);
+                if(targets == null || targets.length == 0)
+                {
+                    if(hoveredUnit != null && (hoveredUnit instanceof TilePicker))
+                        targets = new long[]{hoveredUnit.getId()};
+                    else
+                    {
+                        Utils.consolePrint("Not hovering over any item/tile");
+                        break;
+                    }
+                }
+                
+                genericAction((short)183, targets[0]);
+                clients.genericAction((short)183, targets[0]);
+                break;
+            }
             
             // TODO: clients answer a question (BML window)
             // need to investigate whether this is even feasible
             // case "bml": // maybe "question"
+            
+            case "addtocrafting":
+            {
+                if(hoveredUnit == null || !(hoveredUnit instanceof GroundItemCellRenderable))
+                {
+                    Utils.consolePrint("Not hovering over any ground items");
+                    return;
+                }
+                
+                final long id = hoveredUnit.getId();
+                genericAction(PlayerAction.ADD_TO_CRAFTING_WINDOW.getId(), id);
+                clients.genericAction(PlayerAction.ADD_TO_CRAFTING_WINDOW.getId(), id);
+                break;
+            }
             
             default:
                 Utils.consolePrint("Unknown subcommand `%s`", args[0]);
@@ -752,6 +847,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     }
     
     @Override
+    public void genericAction(short actionID, long targetID) throws RemoteException
+    {
+        PlayerAction action = new PlayerAction(actionID, PlayerAction.ANYTHING, "", false);
+        WurmHelper.hud.sendAction(action, targetID);
+    }
+    
+    @Override
     public void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException
     {
         execute(() -> {
@@ -824,7 +926,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     }
     
     @Override
-    public void mine(long wallID, Direction direction)
+    public void mine(long wallID, Direction direction) throws RemoteException
     {
         execute(() -> {
             if(pickaxeID == -10)
@@ -868,6 +970,7 @@ interface BotClient extends Remote
     String getPlayerName() throws RemoteException;
     
     void execCmds(String[] consoleCommands) throws RemoteException;
+    void genericAction(short actionID, long targetID) throws RemoteException;
     void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException;
     void embark(long vehicleID) throws RemoteException;
     void disembark(/* tile ID? */) throws RemoteException;
@@ -912,6 +1015,13 @@ final class ClientSet implements BotClient
     {
         for(BotClient remote: remotes)
             remote.execCmds(commands);
+    }
+    
+    @Override
+    public void genericAction(short actionID, long targetID) throws RemoteException
+    {
+        for(BotClient remote: remotes)
+            remote.genericAction(actionID, targetID);
     }
     
     @Override
