@@ -22,9 +22,13 @@ import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cave.CaveWallPicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
+import com.wurmonline.client.renderer.gui.CreationFrame;
+import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
+
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
 import net.ildar.wurm.BotController;
 import net.ildar.wurm.Utils;
@@ -432,6 +436,10 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     "bot %s %s addtocrafting -- everyone adds the hovered item to crafting window",
                     botKeyword, cmdKeyword
                 );
+                Utils.consolePrint(
+                    "bot %s %s clearcrafting -- everyone clears both slots in crafting window",
+                    botKeyword, cmdKeyword
+                );
                 break;
             }
             
@@ -722,6 +730,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 break;
             }
             
+            case "clearcrafting":
+            {
+                clearCrafting();
+                clients.clearCrafting();
+                break;
+            }
+            
             default:
                 Utils.consolePrint("Unknown subcommand `%s`", args[0]);
         }
@@ -945,6 +960,34 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             );
         });
     }
+    
+    @Override
+    public void clearCrafting() throws RemoteException
+    {
+        try
+        {
+            CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
+            CreationFrame source = ReflectionUtil.getPrivateField(
+                creationWindow,
+                ReflectionUtil.getField(creationWindow.getClass(), "source")
+            );
+            CreationFrame target = ReflectionUtil.getPrivateField(
+                creationWindow,
+                ReflectionUtil.getField(creationWindow.getClass(), "target")
+            );
+            
+            source.clearGroundItem();
+            target.clearGroundItem();
+            source.clearItemList();
+            target.clearItemList();
+            source.clearTexture();
+            target.clearTexture();
+        }
+        catch(Exception err)
+        {
+            throw new RemoteException("Failed to clear crafting source/target: ", err);
+        }
+    }
 }
 
 final class ScheduledTask
@@ -978,6 +1021,7 @@ interface BotClient extends Remote
     void dig() throws RemoteException;
     void level(long tileID) throws RemoteException;
     void mine(long wallID, MinerBot.Direction direction) throws RemoteException;
+    void clearCrafting() throws RemoteException;
 }
 
 
@@ -1071,6 +1115,13 @@ final class ClientSet implements BotClient
     {
         for(BotClient remote: remotes)
             remote.mine(wallID, direction);
+    }
+    
+    @Override
+    public void clearCrafting() throws RemoteException
+    {
+        for(BotClient remote: remotes)
+            remote.clearCrafting();
     }
 }
 
