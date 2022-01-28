@@ -1,5 +1,6 @@
 package net.ildar.wurm.bot;
 
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.rmi.Remote;
@@ -11,8 +12,10 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import com.wurmonline.client.console.WurmConsole;
 import com.wurmonline.client.game.World;
@@ -25,6 +28,7 @@ import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationFrame;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
+import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
 
@@ -53,6 +57,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     ClientSet clients;
     Registry serverRegistry;
     
+    boolean syncTarget;
+    static final long syncTargetDelay = 250; // doesn't need to be as fine grained
     boolean syncPosition;
     boolean syncHeading;
     long syncDelay = 50;
@@ -153,6 +159,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     
     synchronized void schedule(Runnable task, long msecs)
     {
+        // Utils.consolePrint("Scheduling %s for %sms from now", task, msecs);
         final long now = System.currentTimeMillis();
         scheduledTasks.add(new ScheduledTask(task, now + msecs));
         notify();
@@ -384,11 +391,15 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
-                    "bot %s %s action <action id> <target id> -- everyone performs action on target",
+                    "bot %s %s action <action id> [target id] -- everyone performs action on target (defaults to hovered item/creature/tile)",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
                     "bot %s %s attack -- everyone targets hovered creature",
+                    botKeyword, cmdKeyword
+                );
+                Utils.consolePrint(
+                    "bot %s %s synctarget -- everyone continuously targets one creature, from list of all creatures anybody is attacking (ignores synctime)",
                     botKeyword, cmdKeyword
                 );
                 Utils.consolePrint(
@@ -536,9 +547,18 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 break;
             }
             
-            // TODO: everyone targets a (random) creature anyone is targeting
-            // perhaps if we can get opponents, pick that of the char with the least health
-            // case "synctarget":
+            case "synctarget":
+            {
+                syncTarget = !syncTarget;
+                if(syncTarget)
+                    execute(this::syncTargetTask);
+                
+                Utils.consolePrint(
+                    "Target synchronization %s",
+                    syncTarget ? "on" : "off"
+                );
+                break;
+            }
             
             case "syncpos":
             {
@@ -812,6 +832,50 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
         }
     }
     
+    void syncTargetTask()
+    {
+        printExceptions(
+            () -> {
+                ArrayList<CombatInfo> infos = new ArrayList<>();
+                infos.add(getCombatInfo());
+                for(BotClient remote: clients.remotes)
+                    infos.add(remote.getCombatInfo());
+                
+                final Set<Long> targetSet = infos
+                    .stream()
+                    .map(info -> info.target)
+                    .collect(Collectors.toSet())
+                ;
+                final boolean allTargetingSame = targetSet.size() == 1;
+                targetSet.removeIf(x -> x < 0);
+                if(allTargetingSame || targetSet.size() == 0)
+                {
+                    schedule(this::syncTargetTask, syncTargetDelay);
+                    return;
+                }
+                
+                // everyone should target the creature damaging the most hurt player
+                // if everyone is at full health this will pick a semi-random target
+                CombatInfo mostHurtPlayer = infos
+                    .stream()
+                    .min((l, r) -> Float.compare(l.playerHealth, r.playerHealth))
+                    .get()
+                ;
+                long target = mostHurtPlayer.target; // FIXME: get opponent
+                if(target == -10) // the most hurt player isn't actually fighting anything
+                {
+                    Utils.consolePrint("Choosing semi random target");
+                    target = targetSet.iterator().next();
+                }
+                
+                attack(target);
+                clients.attack(target);
+                schedule(this::syncTargetTask, syncTargetDelay + 1000); // wait for network roundtrip
+            },
+            "Got %s when running target synchronization: %s"
+        );
+    }
+    
     void syncPositionTask()
     {
         final float px = syncPosition ? world.getPlayerPosX() : -1;
@@ -851,6 +915,32 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     public String getPlayerName()
     {
         return world.getPlayer().getPlayerName();
+    }
+    
+    @Override
+    public CombatInfo getCombatInfo() throws RemoteException
+    {
+        CreatureCellRenderable targetCreature;
+        try
+        {
+            TargetWindow window = ReflectionUtil.getPrivateField(
+                hud,
+                ReflectionUtil.getField(hud.getClass(), "targetWindow")
+            );
+            targetCreature = ReflectionUtil.getPrivateField(
+                window,
+                ReflectionUtil.getField(window.getClass(), "creature")
+            );
+        }
+        catch(Exception err)
+        {
+            throw new RemoteException("Couldn't get target window or creature", err);
+        }
+        
+        CombatInfo result = new CombatInfo();
+        result.target = targetCreature == null ? -10 : targetCreature.getId();
+        result.playerHealth = 1f - world.getPlayer().getDamage();
+        return result;
     }
     
     @Override
@@ -990,6 +1080,12 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     }
 }
 
+@FunctionalInterface
+interface ThrowingRunnable
+{
+    void run() throws Exception;
+}
+
 final class ScheduledTask
 {
     public Runnable task;
@@ -1002,6 +1098,14 @@ final class ScheduledTask
     }
 }
 
+final class CombatInfo implements Serializable
+{
+    public long target;
+    // TODO: have to parse this from event window status bar string
+    // public long opponent;
+    public float playerHealth; // (0 .. 1]
+}
+
 interface BotServer extends Remote
 {
     void onClientJoin(String name) throws RemoteException;
@@ -1011,10 +1115,12 @@ interface BotServer extends Remote
 interface BotClient extends Remote
 {
     String getPlayerName() throws RemoteException;
+    CombatInfo getCombatInfo() throws RemoteException;
     
     void execCmds(String[] consoleCommands) throws RemoteException;
     void genericAction(short actionID, long targetID) throws RemoteException;
     void setPosAndHeading(float x, float y, float rx, float ry) throws RemoteException;
+    
     void embark(long vehicleID) throws RemoteException;
     void disembark(/* tile ID? */) throws RemoteException;
     void attack(long creatureID) throws RemoteException;
@@ -1023,7 +1129,6 @@ interface BotClient extends Remote
     void mine(long wallID, MinerBot.Direction direction) throws RemoteException;
     void clearCrafting() throws RemoteException;
 }
-
 
 final class ClientSet implements BotClient
 {
@@ -1052,6 +1157,12 @@ final class ClientSet implements BotClient
             names[index++] = remote.getPlayerName();
         
         return String.join(", ", names);
+    }
+    
+    @Override
+    public CombatInfo getCombatInfo() throws RemoteException
+    {
+        throw new UnsupportedOperationException();
     }
     
     @Override
@@ -1123,10 +1234,4 @@ final class ClientSet implements BotClient
         for(BotClient remote: remotes)
             remote.clearCrafting();
     }
-}
-
-@FunctionalInterface
-interface ThrowingRunnable
-{
-    void run() throws Exception;
 }
