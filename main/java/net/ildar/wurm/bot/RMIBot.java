@@ -738,15 +738,16 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             
             case "addtocrafting":
             {
-                if(hoveredUnit == null || !(hoveredUnit instanceof GroundItemCellRenderable))
+                if(hoveredUnit == null)
                 {
-                    Utils.consolePrint("Not hovering over any ground items");
+                    Utils.consolePrint("Not hovering over anything");
                     return;
                 }
                 
-                final long id = hoveredUnit.getId();
-                genericAction(PlayerAction.ADD_TO_CRAFTING_WINDOW.getId(), id);
-                clients.genericAction(PlayerAction.ADD_TO_CRAFTING_WINDOW.getId(), id);
+                final short actionID = PlayerAction.ADD_TO_CRAFTING_WINDOW.getId();
+                final long target = hoveredUnit.getId();
+                genericAction(actionID, target);
+                clients.genericAction(actionID, target);
                 break;
             }
             
