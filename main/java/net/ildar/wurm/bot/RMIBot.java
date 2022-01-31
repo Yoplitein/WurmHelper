@@ -526,6 +526,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                 
                 genericAction(actionID, targets[0]);
                 clients.genericAction(actionID, targets[0]);
+                
+                break;
             }
             
             // case "select": // TODO: sync everyone's selection (select bar) with server, for commands
