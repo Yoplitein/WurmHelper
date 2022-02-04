@@ -31,6 +31,8 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
 
     public static HeadsUpDisplay hud;
     private static WurmHelper instance;
+    public static boolean hideMount = false;
+    public static boolean hideStructures = false;
 
     public List<WurmComponent> components;
     private Logger logger;
@@ -55,6 +57,8 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         consoleCommandHandlers.put(ConsoleCommand.mtcenter, input -> Utils.moveToCenter());
         consoleCommandHandlers.put(ConsoleCommand.mtcorner, input -> Utils.moveToNearestCorner());
         consoleCommandHandlers.put(ConsoleCommand.stabilizelook, input -> Utils.stabilizeLook());
+        consoleCommandHandlers.put(ConsoleCommand.hidemount, this::toggleHideMount);
+        consoleCommandHandlers.put(ConsoleCommand.hidestructures, this::toggleHideStructures);
         WurmHelper.instance = this;
     }
 
@@ -453,6 +457,22 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         }
         Utils.consolePrint("Didn't find an opened altar");
     }
+    
+    private void toggleHideMount(String[] args) {
+        hideMount = !hideMount;
+        Utils.consolePrint(
+            "Mount is now %s",
+            hideMount ? "hidden" : "visible"
+        );
+    }
+    
+    private void toggleHideStructures(String[] args) {
+        hideStructures = !hideStructures;
+        Utils.consolePrint(
+            "Structures are now %s",
+            hideStructures ? "hidden" : "visible"
+        );
+    }
 
     @Override
     public void configure(Properties properties) {
@@ -492,20 +512,36 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             ctWurmChat.getMethod("addText", "(Ljava/lang/String;Ljava/util/List;Z)V").insertBefore("net.ildar.wurm.Chat.onMessage($1,$2,$3);");
             ctWurmChat.getMethod("addText", "(Ljava/lang/String;Ljava/lang/String;FFFZ)V").insertBefore("net.ildar.wurm.Chat.onMessage($1,$2,$6);");
 
-            CtClass cellRenderableClass = classPool.getCtClass("com.wurmonline.client.renderer.cell.GroundItemCellRenderable");
-            cellRenderableClass.defrost();
-            CtMethod cellRenderableInitializeMethod = CtNewMethod.make("public void initialize() {\n" +
+            CtClass itemCellRenderableClass = classPool.getCtClass("com.wurmonline.client.renderer.cell.GroundItemCellRenderable");
+            itemCellRenderableClass.defrost();
+            CtMethod itemCellRenderableInitializeMethod = CtNewMethod.make("public void initialize() {\n" +
                     "                if (net.ildar.wurm.BotController.getInstance().isInstantiated(net.ildar.wurm.bot.GroundItemGetterBot.class)) {\n" +
                     "                   net.ildar.wurm.bot.Bot gigBot = net.ildar.wurm.BotController.getInstance().getInstance(net.ildar.wurm.bot.GroundItemGetterBot.class);" +
                     "                   ((net.ildar.wurm.bot.GroundItemGetterBot)gigBot).processNewItem(this);\n" +
                     "                }\n" +
                     "        super.initialize();\n" +
-                    "    };", cellRenderableClass);
-            cellRenderableClass.addMethod(cellRenderableInitializeMethod);
-
+                    "    };", itemCellRenderableClass);
+            itemCellRenderableClass.addMethod(itemCellRenderableInitializeMethod);
+            
+            CtClass structureDataClass = classPool.getCtClass("com.wurmonline.client.renderer.structures.StructureData");
+            structureDataClass.getMethod("isVisible", "(Lcom/wurmonline/client/renderer/Frustum;)Z").insertBefore(
+                "if(net.ildar.wurm.WurmHelper.hideStructures) return false;"
+            );
+            CtClass meshClass = classPool.getCtClass("com.wurmonline.client.renderer.mesh.Mesh");
+            meshClass.getMethod("isVisible", "(Lcom/wurmonline/client/renderer/Frustum;)Z").insertBefore(
+                "if(net.ildar.wurm.WurmHelper.hideStructures) return false;"
+            );
+            
+            CtClass creatureRenderable = classPool.getCtClass("com.wurmonline.client.renderer.cell.CreatureCellRenderable");
+            creatureRenderable.getMethod("isVisible", "(Lcom/wurmonline/client/renderer/Frustum;)Z").insertBefore(
+                "if(net.ildar.wurm.WurmHelper.hideMount && " +
+                "this == net.ildar.wurm.WurmHelper.hud.getWorld().getPlayer().getCarrierCreature())" +
+                "return false;"
+            );
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error loading mod", e);
             logger.log(Level.SEVERE, e.toString());
+            throw new RuntimeException(e);
         }
     }
 
@@ -599,7 +635,9 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         actionlist("", "Show the list of available actions to use with \"action\" key"),
         action("abbreviation", "Use the appropritate tool from player's inventory with provided action abbreviation on the hovered object. " +
                 "See the list of available actions with \"" + actionlist.name() + "\" command"),
-        getid("", "Copy the id of hovered object to the clipboard");
+        getid("", "Copy the id of hovered object to the clipboard"),
+        hidemount("", "Toggle hiding of mounted creature/vehicle, for easier terraforming (especially underwater)"),
+        hidestructures("", "Toggle hiding of structures such as walls, fences, and bridges (for getting misrotated torches back out of stone walls)");
 
         private String usage;
         public String description;
