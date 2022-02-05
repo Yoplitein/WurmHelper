@@ -155,7 +155,7 @@ public class ForesterBot extends Bot {
                             lastActionFinishedTime = System.currentTimeMillis();
                         }
                     }
-                    if (planting && (tileType.isGrass() || tileType.tilename.equals("Dirt"))) {
+                    if (planting && (tileType.isGrass() || tileType.tilename.equals("Mycelium") || tileType.tilename.equals("Dirt"))) {
                         List<InventoryMetaItem> sprouts = Utils.getInventoryItems("sprout")
                                 .stream()
                                 .filter(item -> (item.getRarity() == 0))
