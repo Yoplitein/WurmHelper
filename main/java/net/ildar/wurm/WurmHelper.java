@@ -2,6 +2,7 @@ package net.ildar.wurm;
 
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.GroundItemData;
+import com.wurmonline.client.renderer.PickData;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
@@ -33,6 +34,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
     private static WurmHelper instance;
     public static boolean hideMount = false;
     public static boolean hideStructures = false;
+    public static boolean showTileCoords = false;
 
     public List<WurmComponent> components;
     private Logger logger;
@@ -59,6 +61,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
         consoleCommandHandlers.put(ConsoleCommand.stabilizelook, input -> Utils.stabilizeLook());
         consoleCommandHandlers.put(ConsoleCommand.hidemount, this::toggleHideMount);
         consoleCommandHandlers.put(ConsoleCommand.hidestructures, this::toggleHideStructures);
+        consoleCommandHandlers.put(ConsoleCommand.showcoords, this::toggleShowCoords);
         WurmHelper.instance = this;
     }
 
@@ -473,6 +476,29 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             hideStructures ? "hidden" : "visible"
         );
     }
+    
+    private void toggleShowCoords(String[] args) {
+        showTileCoords = !showTileCoords;
+        Utils.consolePrint(
+            "Tile coordinates are now %s",
+            showTileCoords ? "visible" : "hidden"
+        );
+    }
+    
+    public static void addCoordsText(int x, int y, int section, final PickData pickData) {
+        String prefix;
+        switch(section) {
+            case 1:
+                prefix = "North border of ";
+                break;
+            case 2:
+                prefix = "West border of ";
+                break;
+            default:
+                prefix = "";
+        }
+        pickData.addText(String.format("%s%d, %d", prefix, x, y));
+    }
 
     @Override
     public void configure(Properties properties) {
@@ -537,6 +563,11 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
                 "if(net.ildar.wurm.WurmHelper.hideMount && " +
                 "this == net.ildar.wurm.WurmHelper.hud.getWorld().getPlayer().getCarrierCreature())" +
                 "return false;"
+            );
+            
+            CtClass tilePicker = classPool.getCtClass("com.wurmonline.client.renderer.TilePicker");
+            tilePicker.getMethod("getHoverDescription", "(Lcom/wurmonline/client/renderer/PickData;)V").insertAfter(
+                "if(net.ildar.wurm.WurmHelper.showTileCoords) net.ildar.wurm.WurmHelper.addCoordsText(x, y, section, $1);"
             );
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error loading mod", e);
@@ -637,7 +668,8 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
                 "See the list of available actions with \"" + actionlist.name() + "\" command"),
         getid("", "Copy the id of hovered object to the clipboard"),
         hidemount("", "Toggle hiding of mounted creature/vehicle, for easier terraforming (especially underwater)"),
-        hidestructures("", "Toggle hiding of structures such as walls, fences, and bridges (for getting misrotated torches back out of stone walls)");
+        hidestructures("", "Toggle hiding of structures such as walls, fences, and bridges (for getting misrotated torches back out of stone walls)"),
+        showcoords("", "Toggle display of coordinates in tile/border/corner tooltips");
 
         private String usage;
         public String description;
