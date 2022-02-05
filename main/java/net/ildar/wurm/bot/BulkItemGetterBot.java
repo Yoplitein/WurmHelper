@@ -370,7 +370,7 @@ class ItemSpec
         final String canonicalName = getCanonicalName(source);
         return Utils.getInventoryItems(
             target.getChildren(),
-            item -> getCanonicalName(item).contains(canonicalName)
+            item -> getCanonicalName(item).equalsIgnoreCase(canonicalName)
         ).size();
     }
     
