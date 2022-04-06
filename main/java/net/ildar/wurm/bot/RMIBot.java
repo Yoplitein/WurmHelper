@@ -497,7 +497,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             {
                 if(args.length < 2)
                 {
-                    
+                    Utils.consolePrint("Expected action number");
                     return;
                 }
                 
