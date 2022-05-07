@@ -41,6 +41,14 @@ public class Utils {
         WurmHelper.hud.addOnscreenMessage(message, r, g, b, (byte)1);
         consolePrint(message);
     }
+    
+    public static <Cls, Ret> Ret getField(Cls what, String field) throws IllegalAccessException, NoSuchFieldException {
+        return ReflectionUtil.getPrivateField(what, ReflectionUtil.getField(what.getClass(), field));
+    }
+    
+    public static <Cls, Field> void setField(Cls what, String field, Field value) throws IllegalAccessException, NoSuchFieldException {
+        ReflectionUtil.setPrivateField(what, ReflectionUtil.getField(what.getClass(), field), value);
+    }
 
     /**
      * Turn player by specified angle
