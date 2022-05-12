@@ -1,6 +1,7 @@
 package net.ildar.wurm.bot;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -345,6 +346,10 @@ public class AssistantBot extends Bot {
                             (!butchering || data.getModelName().toString().toLowerCase().contains("butchered")) &&
                             (pickaxe > 0 || !needsPickaxeToBury(item))
                     );
+                    // item lists seem to have consistent ordering between multiple clients,
+                    // so this should help parallelize corpses across alts
+                    Collections.shuffle(corpses);
+                    
                     final long now = System.currentTimeMillis();
                     int actions = 0;
                     for (GroundItemCellRenderable item: corpses) {
