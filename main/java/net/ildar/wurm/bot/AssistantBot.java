@@ -1,22 +1,31 @@
 package net.ildar.wurm.bot;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
 import com.wurmonline.client.comm.ServerConnectionListenerClass;
+import com.wurmonline.client.comm.SimpleServerConnectionClass;
+import com.wurmonline.client.game.PlayerObj;
+import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.CreatureData;
 import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.cell.CellRenderable;
+import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
+import com.wurmonline.communication.SocketConnection;
 import com.wurmonline.mesh.Tiles.Tile;
 import com.wurmonline.shared.constants.PlayerAction;
 
@@ -89,6 +98,15 @@ public class AssistantBot extends Bot {
     private long lastBurning;
     private long kindlingBurningTimeout;
     private boolean successfullStartOfBurning;
+    
+    private boolean grooming;
+    private long groomingBrush = -10;
+    // creatures that can be ignored as they have been recently groomed
+    private HashMap<Long, Long> groomedCreatures = new HashMap<>();
+    // creatures which were just queued to be groomed, cleared from groomedCreatures if groomingFailed
+    private HashSet<Long> groomingQueued = new HashSet<>();
+    private boolean groomingFailed;
+    private final long groomIgnoreDuration = 150_000; // 2.5 minutes
 
     private boolean verbose = false;
 
@@ -119,29 +137,35 @@ public class AssistantBot extends Bot {
         registerInputHandler(AssistantBot.InputKey.bu, input -> toggleBurying());
         registerInputHandler(AssistantBot.InputKey.bua, input -> toggleBuryAll());
         registerInputHandler(AssistantBot.InputKey.bud, this::setBuryDelay);
+        registerInputHandler(AssistantBot.InputKey.groom, input -> toggleGrooming());
         registerInputHandler(AssistantBot.InputKey.v, input -> toggleVerbosity());
     }
 
     @Override
-    public void work() throws Exception{
+    public void work() throws Exception {
         registerEventProcessors();
+        
         CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
-        Object progressBar = ReflectionUtil.getPrivateField(creationWindow, ReflectionUtil.getField(creationWindow.getClass(), "progressBar"));
+        Object progressBar = Utils.getField(creationWindow, "progressBar");
+        World world = WurmHelper.hud.getWorld();
+        PlayerObj player = world.getPlayer();
+        SimpleServerConnectionClass serverConnection = world.getServerConnection();
         final int maxActions = Utils.getMaxActionNumber();
+        
         while (isActive()) {
             waitOnPause();
-            final float progress = ReflectionUtil.getPrivateField(progressBar, ReflectionUtil.getField(progressBar.getClass(), "progress"));
+            final float progress = Utils.getField(progressBar, "progress");
             if (progress == 0f && creationWindow.getActionInUse() == 0){
                 if (casting) {
-                    float favor = WurmHelper.hud.getWorld().getPlayer().getSkillSet().getSkillValue("favor");
+                    float favor = player.getSkillSet().getSkillValue("favor");
                     if (favor > spellToCast.favorCap) {
                         successfullCasting = false;
                         successfullCastStart = false;
                         int counter = 0;
                         while (casting && !successfullCastStart && counter++ < 50 && favor > spellToCast.favorCap) {
                             if (verbose) Utils.consolePrint("successfullCastStart counter=" + counter);
-                            WurmHelper.hud.getWorld().getServerConnection().sendAction(statuetteId, new long[]{bodyId}, spellToCast.playerAction);
-                            favor = WurmHelper.hud.getWorld().getPlayer().getSkillSet().getSkillValue("favor");
+                            serverConnection.sendAction(statuetteId, new long[]{bodyId}, spellToCast.playerAction);
+                            favor = player.getSkillSet().getSkillValue("favor");
                             sleep(500);
                         }
                         counter = 0;
@@ -151,7 +175,7 @@ public class AssistantBot extends Bot {
                         }
                     }
                 } else if (wovCasting && Math.abs(lastWOV - System.currentTimeMillis()) > 1810000) {
-                    float favor = WurmHelper.hud.getWorld().getPlayer().getSkillSet().getSkillValue("favor");
+                    float favor = player.getSkillSet().getSkillValue("favor");
                     if (favor > 30) {
                         successfullCasting = false;
                         successfullCastStart = false;
@@ -159,7 +183,7 @@ public class AssistantBot extends Bot {
                         int counter = 0;
                         while (wovCasting && !successfullCastStart && counter++ < 50 && !needWaitWov) {
                             if (verbose) Utils.consolePrint("successfullCastStart counter=" + counter);
-                            WurmHelper.hud.getWorld().getServerConnection().sendAction(statuetteId, new long[]{bodyId}, PlayerAction.WISDOM_OF_VYNORA);
+                            serverConnection.sendAction(statuetteId, new long[]{bodyId}, PlayerAction.WISDOM_OF_VYNORA);
                             sleep(500);
                         }
                         counter = 0;
@@ -174,7 +198,7 @@ public class AssistantBot extends Bot {
                     }
                 }
                 if (drinking) {
-                    float thirst = WurmHelper.hud.getWorld().getPlayer().getThirst();
+                    float thirst = player.getThirst();
                     if (thirst > 0.1) {
                         successfullDrinking = false;
                         successfullDrinkingStart = false;
@@ -207,7 +231,7 @@ public class AssistantBot extends Bot {
                     int counter = 0;
                     while (lockpicking && !successfullStartOfLockpicking && counter++ < 50 && !noLock) {
                         if (verbose) Utils.consolePrint("successfullStartOfLockpicking counter=" + counter);
-                        WurmHelper.hud.getWorld().getServerConnection().sendAction(lockpickId,
+                        serverConnection.sendAction(lockpickId,
                                 new long[]{chestId}, new PlayerAction("",(short) 101, PlayerAction.ANYTHING));
                         sleep(500);
                     }
@@ -230,7 +254,7 @@ public class AssistantBot extends Bot {
                         counter = 0;
                         while (lockpicking && !successfullLocking && counter++ < 50) {
                             if (verbose) Utils.consolePrint("successfullLocking lockingcounter=" + counter);
-                            WurmHelper.hud.getWorld().getServerConnection().sendAction(padlockId,
+                            serverConnection.sendAction(padlockId,
                                     new long[]{chestId}, new PlayerAction("",(short) 161, PlayerAction.ANYTHING));
                             sleep(500);
                         }
@@ -304,13 +328,13 @@ public class AssistantBot extends Bot {
                             long[] targetIds = new long[kindlings.size()];
                             for (int i = 0; i < Math.min(kindlings.size(), 64); i++)
                                 targetIds[i] = kindlings.get(i).getId();
-                            WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                            serverConnection.sendAction(
                                     targetIds[0], targetIds, PlayerAction.COMBINE);
                             successfullStartOfBurning = false;
                             int counter = 0;
                             while (kindlingBurning && !successfullStartOfBurning && counter++ < 50) {
                                 if (verbose) Utils.consolePrint("successfullStartOfBurning counter=" + counter);
-                                WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                                serverConnection.sendAction(
                                         biggestKindling.getId(), new long[]{forgeId}, new PlayerAction("",(short) 117, PlayerAction.ANYTHING));
                                 sleep(300);
                             }
@@ -326,7 +350,7 @@ public class AssistantBot extends Bot {
                     
                     int actions = 0;
                     for (GroundItemCellRenderable corpse: corpses) {
-                        WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                        serverConnection.sendAction(
                             butcheringKnife,
                             new long[]{corpse.getId()},
                             PlayerAction.BUTCHER
@@ -357,7 +381,7 @@ public class AssistantBot extends Bot {
                         corpseTimes.putIfAbsent(id, now);
                         
                         if (now - corpseTimes.get(id) > buryDelay) {
-                            WurmHelper.hud.getWorld().getServerConnection().sendAction(
+                            serverConnection.sendAction(
                                 needsPickaxeToBury(item) ? pickaxe : shovel,
                                 new long[]{item.getId()},
                                 buryAll ? PlayerAction.BURY_ALL : PlayerAction.BURY
@@ -379,6 +403,38 @@ public class AssistantBot extends Bot {
                 } else if (burying) {
                     Utils.consolePrint("Don't have a shovel to bury with!");
                     burying = false;
+                }
+                
+                if (grooming && groomingBrush > 0) {
+                    final long now = System.currentTimeMillis();
+                    groomedCreatures.entrySet().removeIf(
+                        pair ->
+                            now - pair.getValue() > groomIgnoreDuration ||
+                            groomingFailed && groomingQueued.contains(pair.getKey())
+                    );
+                    groomingQueued.clear();
+                    groomingFailed = false;
+                    
+                    List<CreatureCellRenderable> creatures = findGroomableCreatures(
+                        (creature, data) ->
+                            !groomedCreatures.containsKey(creature.getId())
+                    );
+                    int actionsLeft = maxActions - creationWindow.getActionInUse();
+                    for (CreatureCellRenderable creature: creatures) {
+                        if(actionsLeft <= 0) break;
+                        actionsLeft--;
+                        final long id = creature.getId();
+                        groomedCreatures.put(id, now);
+                        groomingQueued.add(id);
+                        serverConnection.sendAction(
+                            groomingBrush,
+                            new long[]{id},
+                            PlayerAction.GROOM
+                        );
+                    }
+                } else if(grooming) {
+                    Utils.consolePrint("Don't have a brush to groom with!");
+                    grooming = false;
                 }
             }
             sleep(timeout);
@@ -425,6 +481,13 @@ public class AssistantBot extends Bot {
         registerEventProcessor(message -> message.contains("You start to sacrifice")
                         || message.contains("you will start sacrificing"),
                 () -> successfullStartOfSacrificing = true);
+        registerEventProcessor(
+            message ->
+                message.contains("shys away") ||
+                message.contains("too far away to do that")
+            ,
+            () -> groomingFailed = true
+        );
     }
 
     private void toggleDrinkingByTargetId(String input[]) {
@@ -970,6 +1033,29 @@ public class AssistantBot extends Bot {
         }
     }
 
+    private void toggleGrooming() {
+        grooming ^= true;
+        groomedCreatures.clear();
+        Utils.consolePrint(
+            "Bot will%s groom creatures",
+            grooming ?
+                "" :
+                "no longer"
+        );
+        
+        if(grooming) {
+            InventoryMetaItem item = Utils.locateToolItem("grooming brush");
+            if(item == null) {
+                Utils.consolePrint("Couldn't find a brush, grooming is disabled.");
+                grooming = false;
+                return;
+            }
+            groomingBrush = item.getId();
+        } else {
+            groomingBrush = -10;
+        }
+    }
+    
     private void toggleVerbosity() {
         verbose = !verbose;
         if (verbose)
@@ -980,7 +1066,7 @@ public class AssistantBot extends Bot {
     
     private List<GroundItemCellRenderable> findCorpses(BiPredicate<GroundItemCellRenderable, GroundItemData> predicate) {
         predicate = ((BiPredicate<GroundItemCellRenderable, GroundItemData>)this::isCorpse)
-            .and(this::isNearby)
+            .and((item, data) -> isNearby(item))
             .and(predicate)
         ;
         
@@ -1012,15 +1098,15 @@ public class AssistantBot extends Bot {
         return item.getHoverName().toLowerCase().startsWith("corpse of");
     }
     
-    private static final float maxCorpseSqDistance = 4 * 4;
-    private boolean isNearby(GroundItemCellRenderable item, GroundItemData data) {
+    private static final float maxActionSqDistance = 5 * 5;
+    private boolean isNearby(CellRenderable obj) {
         final float px = WurmHelper.hud.getWorld().getPlayerPosX();
         final float py = WurmHelper.hud.getWorld().getPlayerPosY();
         final double sqDist =
-            Math.pow(px - item.getXPos(), 2f) +
-            Math.pow(py - item.getYPos(), 2f)
+            Math.pow(px - obj.getXPos(), 2f) +
+            Math.pow(py - obj.getYPos(), 2f)
         ;
-        return sqDist < maxCorpseSqDistance;
+        return sqDist < maxActionSqDistance;
     }
     
     private boolean needsPickaxeToBury(GroundItemCellRenderable item) {
@@ -1040,6 +1126,63 @@ public class AssistantBot extends Bot {
             tileID == Tile.TILE_ROCK.id ||
             tileID == Tile.TILE_CLIFF.id
         ;
+    }
+    
+    static final String[] groomableCreatureNames = {
+        "bison",
+        "bull",
+        "calf",
+        "chicken",
+        "cow",
+        "deer",
+        "dog",
+        "foal",
+        "hen",
+        "horse",
+        "hyena",
+        "lamb",
+        "pheasant",
+        "pig",
+        "ram",
+        "rooster",
+        "seal",
+        "sheep",
+        "unicorn",
+    };
+    private boolean isGroomable(CreatureCellRenderable creature, CreatureData Data) {
+        final String name = creature.getHoverName().toLowerCase();
+        return Arrays
+            .stream(groomableCreatureNames)
+            .anyMatch(allowed -> name.contains(allowed))
+        ;
+    }
+    
+    private List<CreatureCellRenderable> findGroomableCreatures(BiPredicate<CreatureCellRenderable, CreatureData> predicate) {
+        predicate = ((BiPredicate<CreatureCellRenderable, CreatureData>)this::isGroomable)
+            .and((creature, data) -> isNearby(creature))
+            .and(predicate)
+        ;
+        
+        List<CreatureCellRenderable> creatures = new ArrayList<>();
+        try {
+            ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
+            Map<Long, CreatureCellRenderable> creaturesMap = Utils.getField(sscc, "creatures");
+            for(CreatureCellRenderable creature: creaturesMap.values()) {
+                CreatureData data;
+                try {
+                    data = Utils.getField(creature, "creature");
+                } catch (Exception e) {
+                    Utils.consolePrint(e.toString());
+                    continue;
+                }
+                
+                if(predicate.test(creature, data))
+                    creatures.add(creature);
+            }
+        } catch (Exception e) {
+            Utils.consolePrint(e.toString());
+        }
+        return creatures;
     }
     
     private enum InputKey implements Bot.InputKey {
@@ -1072,6 +1215,7 @@ public class AssistantBot extends Bot {
         bu("Toggle burying of corpses on the ground", ""),
         bua("Toggle burying corpses with normal bury action vs bury all", ""),
         bud("Set delay before burying corpses (to allow other bots time to move items)", "msecs"),
+        groom("Toggle grooming of creatures", ""),
         v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", "");
 
         private String description;
