@@ -92,6 +92,7 @@ public class AssistantBot extends Bot {
     private boolean buryAll;
     private long buryDelay = 2500;
     private HashMap<Long, Long> corpseTimes = new HashMap<>();
+    private HashSet<String> blacklistedCorpseNames = new HashSet<>();
 
     private boolean kindlingBurning;
     private long forgeId;
@@ -137,6 +138,12 @@ public class AssistantBot extends Bot {
         registerInputHandler(AssistantBot.InputKey.bu, input -> toggleBurying());
         registerInputHandler(AssistantBot.InputKey.bua, input -> toggleBuryAll());
         registerInputHandler(AssistantBot.InputKey.bud, this::setBuryDelay);
+        registerInputHandler(AssistantBot.InputKey.bub, input -> addCorpseBlacklist(
+            Arrays
+                .stream(input != null ? input : new String[]{})
+                .collect(Collectors.joining(" "))
+        ));
+        registerInputHandler(AssistantBot.InputKey.bubc, input -> addCorpseBlacklist(null));
         registerInputHandler(AssistantBot.InputKey.groom, input -> toggleGrooming());
         registerInputHandler(AssistantBot.InputKey.v, input -> toggleVerbosity());
     }
@@ -366,9 +373,17 @@ public class AssistantBot extends Bot {
                 
                 if (burying && shovel > 0) {
                     List<GroundItemCellRenderable> corpses = findCorpses(
-                        (item, data) ->
-                            (!butchering || data.getModelName().toString().toLowerCase().contains("butchered")) &&
-                            (pickaxe > 0 || !needsPickaxeToBury(item))
+                        (item, data) -> {
+                            final String modelName = data.getModelName().toString().toLowerCase();
+                            final String displayName = item.getHoverName().toLowerCase();
+                            return
+                                (!butchering || modelName.contains("butchered")) &&
+                                (pickaxe > 0 || !needsPickaxeToBury(item)) &&
+                                blacklistedCorpseNames
+                                    .stream()
+                                    .noneMatch(displayName::contains)
+                            ;
+                        }
                     );
                     // item lists seem to have consistent ordering between multiple clients,
                     // so this should help parallelize corpses across alts
@@ -1002,6 +1017,7 @@ public class AssistantBot extends Bot {
             
             buryAll = false;
             toggleBuryAll(); // notify user that bury all is default
+            addCorpseBlacklist("rift");
         } else {
             shovel = -10;
             pickaxe = -10;
@@ -1030,6 +1046,27 @@ public class AssistantBot extends Bot {
             Utils.consolePrint("Bot will bury corpses after %d milliseconds", buryDelay);
         } catch (NumberFormatException e) {
             Utils.consolePrint("`%s` is not an integer");
+        }
+    }
+    
+    private void addCorpseBlacklist(String keyword) {
+        if (keyword != null) {
+            if (keyword.equals(""))
+            {
+                Utils.consolePrint("Must specify something to blacklist!");
+                return;
+            }
+            
+            blacklistedCorpseNames.add(keyword.toLowerCase());
+            Utils.consolePrint(
+                "Bot will not bury corpses with names containing: %s",
+                blacklistedCorpseNames
+                    .stream()
+                    .collect(Collectors.joining(", "))
+            );
+        } else {
+            blacklistedCorpseNames.clear();
+            Utils.consolePrint("Bot will bury all corpses");
         }
     }
 
@@ -1215,6 +1252,8 @@ public class AssistantBot extends Bot {
         bu("Toggle burying of corpses on the ground", ""),
         bua("Toggle burying corpses with normal bury action vs bury all", ""),
         bud("Set delay before burying corpses (to allow other bots time to move items)", "msecs"),
+        bub("Add keyword to corpse blacklist -- e.g. to prevent bot burying Rift creatures which is set by default", "keyword"),
+        bubc("Clear corpse blacklist", ""),
         groom("Toggle grooming of creatures", ""),
         v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", "");
 
