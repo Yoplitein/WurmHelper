@@ -2,6 +2,7 @@ package net.ildar.wurm;
 
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.SkillLogicSet;
+import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.gui.*;
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
@@ -132,10 +133,17 @@ public class Utils {
 
     public static void movePlayer(float x, float y) {
         try{
-            ReflectionUtil.setPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "xPosUsed"), x);
-            ReflectionUtil.setPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "yPosUsed"), y);
+            World world = WurmHelper.hud.getWorld();
+            PlayerObj ply = world.getPlayer();
+            setField(ply, "xPosUsed", x);
+            setField(ply, "yPosUsed", y);
+            
+            float z;
+            if(ply.getLayer() >= 0)
+                z = Math.max(-1, world.getNearTerrainBuffer().getInterpolatedHeight(x, y));
+            else
+                z = Math.min(-1, world.getCaveBuffer().getInterpolatedFloor(x, y));
+            setField(ply, "hPosUsed", z);
         } catch (Exception e) {
             consolePrint("Unexpected error while moving - " + e.getMessage());
             consolePrint( e.toString());
