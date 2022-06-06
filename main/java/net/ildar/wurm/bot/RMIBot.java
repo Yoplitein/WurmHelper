@@ -837,6 +837,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     
     void syncTargetTask()
     {
+        if(!syncTarget) return;
         printExceptions(
             () -> {
                 ArrayList<CombatInfo> infos = new ArrayList<>();
