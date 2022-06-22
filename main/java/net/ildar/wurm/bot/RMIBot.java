@@ -17,6 +17,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
+
 import com.wurmonline.client.console.WurmConsole;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
@@ -24,15 +26,12 @@ import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cave.CaveWallPicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
-import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationFrame;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.mesh.Tiles;
 import com.wurmonline.shared.constants.PlayerAction;
-
-import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
 import net.ildar.wurm.BotController;
 import net.ildar.wurm.Utils;
@@ -718,10 +717,13 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
             case "drink":
             {
                 long[] targets = hud.getCommandTargetsFrom(mouseX, mouseY);
-                if(targets == null || targets.length == 0)
+                long target;
+                if(targets != null && targets.length > 0)
+                    target = targets[0];
+                else
                 {
-                    if(hoveredUnit != null && (hoveredUnit instanceof TilePicker))
-                        targets = new long[]{hoveredUnit.getId()};
+                    if(hoveredUnit != null)
+                        target = hoveredUnit.getId();
                     else
                     {
                         Utils.consolePrint("Not hovering over any item/tile");
@@ -729,8 +731,8 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     }
                 }
                 
-                genericAction((short)183, targets[0]);
-                clients.genericAction((short)183, targets[0]);
+                genericAction((short)183, target);
+                clients.genericAction((short)183, target);
                 break;
             }
             
