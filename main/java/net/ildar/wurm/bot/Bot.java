@@ -81,7 +81,7 @@ public abstract class Bot extends Thread {
 
     public synchronized void setResumed() {
         paused = false;
-        this.notify();
+        this.notifyAll();
         Utils.consolePrint(getClass().getSimpleName() + " is resumed.");
     }
 
