@@ -27,6 +27,8 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.vecmath.Color3f;
+
 public class WurmHelper implements WurmClientMod, Initable, Configurable, PreInitable {
     private final long BLESS_TIMEOUT = 1800000;
 
@@ -41,6 +43,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
     private Map<ConsoleCommand, ConsoleCommandHandler> consoleCommandHandlers;
     private long lastBless = 0L;
     private boolean noBlessings = false;
+    public static Color3f consoleColor = new Color3f(0.5f, 1, 1);
 
     public WurmHelper() {
         logger = Logger.getLogger("WurmHelper");
@@ -502,16 +505,30 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
 
     @Override
     public void configure(Properties properties) {
-        String enableInfoCommands = properties.getProperty("DevInfoCommands");
-        if (enableInfoCommands != null && enableInfoCommands.equals("true")) {
+        String enableInfoCommands = properties.getProperty("DevInfoCommands", "false");
+        if (enableInfoCommands.equalsIgnoreCase("true")) {
             consoleCommandHandlers.put(ConsoleCommand.iteminfo, input -> printItemInformation());
             consoleCommandHandlers.put(ConsoleCommand.tileinfo, input -> printTileInformation());
             consoleCommandHandlers.put(ConsoleCommand.playerinfo, input -> printPlayerInformation());
             consoleCommandHandlers.put(ConsoleCommand.creatureinfo, input -> printCreatureInformation());
         }
-        String noBlessings = properties.getProperty("NoBlessings");
-        if (noBlessings != null && noBlessings.equals("true"))
-            this.noBlessings = true;
+        
+        String noBlessings = properties.getProperty("NoBlessings", "false");
+        this.noBlessings = noBlessings.equalsIgnoreCase("true");
+        
+        String consoleMsgColor = properties.getProperty("ConsoleMsgColor", "0.5,1.0,1.0");
+        try {
+            String[] bits = consoleMsgColor.split(",");
+            float r = Float.parseFloat(bits[0]);
+            float g = Float.parseFloat(bits[1]);
+            float b = Float.parseFloat(bits[2]);
+            consoleColor = new Color3f(r, g, b);
+        } catch(Exception err) {
+            Utils.consolePrint(
+                "%s: failed to parse ConsoleMsgColor property, using default",
+                WurmHelper.class.getSimpleName()
+            );
+        }
     }
 
     @Override
@@ -528,10 +545,16 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             ctSocketConnection.getMethod("flush", "()V").insertAfter("net.ildar.wurm.Utils.serverCallLock.unlock();");
 
             final CtClass ctConsoleComponent = classPool.getCtClass("com.wurmonline.client.renderer.gui.ConsoleComponent");
-            CtMethod consoleGameTickMethod = CtNewMethod.make("public void gameTick() {\n" +
-                    "        while(!net.ildar.wurm.Utils.consoleMessages.isEmpty()) addLine((String)net.ildar.wurm.Utils.consoleMessages.poll(), 1.0F, 1.0F, 1.0F);\n" +
-                    "        super.gameTick();\n" +
-                    "    };", ctConsoleComponent);
+            CtMethod consoleGameTickMethod = CtNewMethod.make(
+                "public void gameTick() {" +
+                "  javax.vecmath.Color3f c = net.ildar.wurm.WurmHelper.consoleColor;" +
+                "  while(!net.ildar.wurm.Utils.consoleMessages.isEmpty()) {" +
+                "    addLine((String)net.ildar.wurm.Utils.consoleMessages.poll(), c.x, c.y, c.z);" +
+                "  }" +
+                "  super.gameTick();" +
+                "};",
+                ctConsoleComponent
+            );
             ctConsoleComponent.addMethod(consoleGameTickMethod);
 
             final CtClass ctWurmChat = classPool.getCtClass("com.wurmonline.client.renderer.gui.ChatPanelComponent");
