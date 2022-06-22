@@ -29,10 +29,12 @@ public class Utils {
      * Print the message to the console
      */
     public static void consolePrint(String fmt, Object... args) {
-        if (fmt != null)
-            consoleMessages.add(
-                args.length == 0 ? fmt : String.format(fmt, args)
-            );
+        if (fmt == null)
+            return;
+        
+        fmt = args.length == 0 ? fmt : String.format(fmt, args);
+        for(String line: fmt.split("\n"))
+            consoleMessages.add(line);
     }
 
     public static void showOnScreenMessage(String message) {
