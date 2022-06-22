@@ -497,6 +497,26 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             case 2:
                 prefix = "West border of ";
                 break;
+            // cave walls
+            case -1:
+                prefix = "Floor of ";
+                break;
+            case -2:
+                prefix = "Ceiling of ";
+                break;
+            case -3:
+                prefix = "East face of ";
+                break;
+            case -4:
+                prefix = "South face of ";
+                break;
+            case -5:
+                prefix = "West face of ";
+                break;
+            case -6:
+                prefix = "North face of ";
+                break;
+            // TODO: cave tile borders? their coords and `wallSide` are really funky though
             default:
                 prefix = "";
         }
@@ -590,7 +610,15 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             
             CtClass tilePicker = classPool.getCtClass("com.wurmonline.client.renderer.TilePicker");
             tilePicker.getMethod("getHoverDescription", "(Lcom/wurmonline/client/renderer/PickData;)V").insertAfter(
-                "if(net.ildar.wurm.WurmHelper.showTileCoords) net.ildar.wurm.WurmHelper.addCoordsText(x, y, section, $1);"
+                "if(net.ildar.wurm.WurmHelper.showTileCoords)" +
+                "  net.ildar.wurm.WurmHelper.addCoordsText(x, y, section, $1);"
+            );
+            CtClass cavePicker = classPool.getCtClass("com.wurmonline.client.renderer.cave.CaveWallPicker");
+            cavePicker.getMethod("getHoverDescription", "(Lcom/wurmonline/client/renderer/PickData;)V").insertAfter(
+                "final int tilex = (this.wallSide == 4) ? (this.x + 1) : ((this.wallSide == 2) ? (this.x - 1) : this.x);" +
+                "final int tiley = (this.wallSide == 5) ? (this.y + 1) : ((this.wallSide == 3) ? (this.y - 1) : this.y);" +
+                "if(net.ildar.wurm.WurmHelper.showTileCoords)" +
+                "  net.ildar.wurm.WurmHelper.addCoordsText(tilex, tiley, -1 - wallSide, $1);"
             );
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error loading mod", e);
