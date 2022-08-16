@@ -6,18 +6,24 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
 
+import com.wurmonline.client.comm.ServerConnectionListenerClass;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.SkillLogicSet;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.CreatureData;
+import com.wurmonline.client.renderer.cell.CellRenderable;
+import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.InventoryListComponent;
 import com.wurmonline.client.renderer.gui.InventoryWindow;
 import com.wurmonline.client.renderer.gui.ItemListWindow;
@@ -67,12 +73,11 @@ public class Utils {
      */
     public static void turnPlayer(float dxRot) {
         try{
-            float xRot = ReflectionUtil.getPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "xRotUsed"));
+            final PlayerObj ply = WurmHelper.hud.getWorld().getPlayer();
+            float xRot = getField(ply, "xRotUsed");
             xRot = (xRot + dxRot)%360;
             if (xRot < 0 ) xRot = (xRot + 360)%360;
-            ReflectionUtil.setPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "xRotUsed"), xRot);
+            setField(ply, "xRotUsed", xRot);
         } catch (Exception e) {
             consolePrint("Unexpected error while turning - " + e.getMessage());
         }
@@ -85,10 +90,9 @@ public class Utils {
      */
     public static void turnPlayer(float xRot, float yRot) {
         try{
-            ReflectionUtil.setPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "xRotUsed"), xRot);
-            ReflectionUtil.setPrivateField(WurmHelper.hud.getWorld().getPlayer(),
-                    ReflectionUtil.getField(WurmHelper.hud.getWorld().getPlayer().getClass(), "yRotUsed"), yRot);
+            final PlayerObj ply = WurmHelper.hud.getWorld().getPlayer();
+            if(!Float.isNaN(xRot)) setField(ply, "xRotUsed", xRot);
+            if(!Float.isNaN(yRot)) setField(ply, "yRotUsed", yRot);
         } catch (Exception e) {
             consolePrint("Unexpected error while turning - " + e.getMessage());
         }
@@ -683,4 +687,42 @@ public class Utils {
             throw new RuntimeException(err);
         }
 	}
+    
+    public static List<CreatureCellRenderable> findCreatures(BiPredicate<CreatureCellRenderable, CreatureData> predicate) {
+        List<CreatureCellRenderable> creatures = new ArrayList<>();
+        try {
+            ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
+            Map<Long, CreatureCellRenderable> creaturesMap = getField(sscc, "creatures");
+            for(CreatureCellRenderable creature: creaturesMap.values()) {
+                CreatureData data;
+                try {
+                    data = getField(creature, "creature");
+                } catch (Exception e) {
+                    consolePrint(e.toString());
+                    continue;
+                }
+                
+                if(predicate.test(creature, data))
+                    creatures.add(creature);
+            }
+        } catch (Exception e) {
+            Utils.consolePrint(e.toString());
+        }
+        return creatures;
+    }
+    
+    /** Squared distance from player to given object. */
+    public static float sqdistFromPlayer(CellRenderable obj) {
+        final float px = WurmHelper.hud.getWorld().getPlayerPosX();
+        final float py = WurmHelper.hud.getWorld().getPlayerPosY();
+        return (float)(
+            Math.pow(px - obj.getXPos(), 2f) +
+            Math.pow(py - obj.getYPos(), 2f)
+        );
+    }
+    
+    private static final float maxActionSqDistance = 5 * 5;
+    public static boolean isNearbyPlayer(CellRenderable obj) {
+        return sqdistFromPlayer(obj) < maxActionSqDistance;
+    }
 }

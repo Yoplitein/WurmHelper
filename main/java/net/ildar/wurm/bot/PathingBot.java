@@ -7,25 +7,28 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import com.wurmonline.client.comm.ServerConnectionListenerClass;
 import com.wurmonline.client.game.NearTerrainDataBuffer;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.TerrainDataBuffer;
 import com.wurmonline.client.game.World;
-import com.wurmonline.client.renderer.CreatureData;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
+import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.client.renderer.structures.FenceData;
 import com.wurmonline.client.renderer.structures.HouseData;
 import com.wurmonline.client.renderer.structures.HouseWallData;
 import com.wurmonline.client.renderer.structures.StructureData;
 import com.wurmonline.math.Vector2f;
+import com.wurmonline.shared.constants.PlayerAction;
 import com.wurmonline.shared.constants.StructureTypeEnum;
 
 import net.ildar.wurm.Utils;
@@ -93,6 +96,7 @@ public class PathingBot extends Bot
 		registerInputHandler(Inputs.speed, inPool(this::cmdSpeed));
 		registerInputHandler(Inputs.walkto, inPool(this::cmdWalkto));
 		registerInputHandler(Inputs.follow, inPool(this::cmdFollow));
+		registerInputHandler(Inputs.murder, inPool(this::cmdMurder));
 	}
 	
 	void cmdSpeed(String[] args)
@@ -122,15 +126,20 @@ public class PathingBot extends Bot
 		
 		int tx = Integer.parseInt(args[0]);
 		int ty = Integer.parseInt(args[1]);
-		Utils.consolePrint("pathfinding to %d,%d", tx, ty);
+		Utils.consolePrint("Pathfinding to %d,%d", tx, ty);
 		if(!walkPath(tx, ty))
 			Utils.consolePrint("Couldn't find a path/interrupted");
+	}
+	
+	void enforceNoTasksRunning()
+	{
+		if(following || murdering)
+			throw new RuntimeException("Another task is already enabled");
 	}
 	
 	boolean following = false;
 	void cmdFollow(String[] args)
 	{
-		Utils.consolePrint("OwO");
 		if(following)
 		{
 			following = false;
@@ -143,25 +152,21 @@ public class PathingBot extends Bot
 			return;
 		}
 		
-		ServerConnectionListenerClass sscc = world.getServerConnection().getServerConnectionListener();
-		Map<Long, CreatureCellRenderable> creaturesMap;
-		try { creaturesMap = Utils.getField(sscc, "creatures"); }
-		catch(Exception err) { Utils.consolePrint("%s", err); return; }
+		enforceNoTasksRunning();
 		
 		final String targetPlayerName = args[0].toLowerCase();
-		CreatureCellRenderable targetPlayer = null;
-		for(CreatureCellRenderable creature: creaturesMap.values())
-		{
-			if(
-				!creature.getModelName().toString().contains(".player") ||
-				!creature.getHoverName().toLowerCase().startsWith(targetPlayerName))
-				continue;
-			targetPlayer = creature;
-			break;
-		}
+		CreatureCellRenderable targetPlayer = Utils
+			.findCreatures((creature, data) ->
+				creature.getModelName().toString().contains(".player") &&
+				creature.getHoverName().toLowerCase().startsWith(targetPlayerName)
+			)
+			.stream()
+			.findFirst()
+			.orElse(null)
+		;
 		if(targetPlayer == null)
 		{
-			Utils.consolePrint("Couldn't find any players matching that name");
+			Utils.consolePrint("Couldn't find any players with name `%s`", targetPlayerName);
 			return;
 		}
 		
@@ -196,6 +201,105 @@ public class PathingBot extends Bot
 			}
 		}
 		following = false;
+	}
+	
+	boolean murdering = false;
+	static final Pattern petItemRe = Pattern.compile("\\w's pet$", Pattern.CASE_INSENSITIVE);
+	void cmdMurder(String[] args)
+	{
+		if(murdering)
+		{
+			murdering = false;
+			return;
+		}
+		
+		// TODO: only target hostile/passive
+		/* String type = "all";
+		if(args != null || args.length >= 1)
+		{
+			type = args[0].toLowerCase();
+			switch(type)
+			{
+				case "all":
+				case "passive":
+				case "hostile":
+					break;
+				default:
+					Utils.consolePrint("Unknown mode `%s`, expected one of all/passive/hostile", type);
+					return;
+			}
+		}
+		
+		final boolean passive = type.equals("all") || type.equals("passive");
+		final boolean hostile = type.equals("all") || type.equals("hostile"); */
+		
+		enforceNoTasksRunning();
+		
+		murdering = true;
+		HashSet<Long> ignoredCreatures = new HashSet<>();
+		List<CreatureCellRenderable> creatures;
+		TargetWindow targetWindow = Utils.rethrow(() -> Utils.getField(hud, "targetWindow"));
+		CreatureCellRenderable target = null;
+		outer: while(!exiting && murdering)
+		{
+			long targetId = -1;
+			while(murdering && target != null && (targetId = Utils.rethrow(() -> (long)Utils.getField(targetWindow, "targetId"))) > 0)
+			{
+				if(targetId != target.getId())
+				{
+					hud.sendAction(PlayerAction.TARGET, target.getId());
+					Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+					if(exiting || !murdering) break outer;
+				}
+				else if(targetId <= 0)
+				{
+					target = null;
+					continue outer;
+				}
+				
+				if(Utils.sqdistFromPlayer(target) > 4 * 4)
+					if(!walkPath((int)(target.getXPos() / 4f), (int)(target.getYPos() / 4f)))
+					{
+						ignoredCreatures.add(target.getId());
+						target = null;
+						hud.sendAction(PlayerAction.NO_TARGET, -1);
+						continue outer;
+					}
+					else
+					{
+						if(exiting || !murdering) break outer;
+						// TODO: position player a reasonable distance from target
+						/* Utils.moveToCenter();
+						Vector2f remainder = new Vector2f(target.getXPos(), target.getYPos());
+						remainder.subtract(world.getPlayerPosX(), world.getPlayerPosY()); */
+					}
+				
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
+				if(exiting || !murdering) break outer;
+			}
+			
+			creatures = Utils.findCreatures((creature, data) ->
+				!ignoredCreatures.contains(creature.getId()) &&
+				!creature.isItem() &&
+				creature.getKingdomId() == 0 &&
+				!creature.isControlled() &&
+				!creature.getHoverName().startsWith("preserved") &&
+				!petItemRe.matcher(data.getHoverText()).find()
+			);
+			creatures.sort((l, r) -> Float.compare(Utils.sqdistFromPlayer(l), Utils.sqdistFromPlayer(r)));
+			
+			target = creatures.stream().findFirst().orElse(null);
+			if(target == null)
+			{
+				Utils.consolePrint("Can't find any creatures to target");
+				break;
+			}
+			
+			hud.sendAction(PlayerAction.TARGET, target.getId());
+			Utils.consolePrint("Murdering `%s`", target.getHoverName());
+			Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+		}
+		murdering = false;
 	}
 	
 	@Override
@@ -261,7 +365,6 @@ public class PathingBot extends Bot
 		try
 		{
 			final Collection<Vec2i> path = findPath(tileX, tileY);
-			Utils.consolePrint("path: %s", path);
 			if(path == null) return false;
 			for(Vec2i tileCoords: path)
 			{
@@ -373,6 +476,7 @@ public class PathingBot extends Bot
 		speed("Set speed at which bot will move, in km/h", "real"),
 		walkto("Walk to given tile coordinates", "x,y"),
 		follow("Follow the given player", "name"),
+		murder("Find and murder nearby creatures", ""),
 		;
 		
 		String description;
