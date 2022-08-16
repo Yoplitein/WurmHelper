@@ -151,37 +151,41 @@ public class PathingBot extends Bot
 			printInputKeyUsageString(Inputs.follow);
 			return;
 		}
+		final String targetPlayerName = args[0].toLowerCase();
 		
 		enforceNoTasksRunning();
-		
-		final String targetPlayerName = args[0].toLowerCase();
-		CreatureCellRenderable targetPlayer = Utils
-			.findCreatures((creature, data) ->
-				creature.getModelName().toString().contains(".player") &&
-				creature.getHoverName().toLowerCase().startsWith(targetPlayerName)
-			)
-			.stream()
-			.findFirst()
-			.orElse(null)
-		;
-		if(targetPlayer == null)
-		{
-			Utils.consolePrint("Couldn't find any players with name `%s`", targetPlayerName);
-			return;
-		}
 		
 		following = true;
 		while(!exiting && following)
 		{
+			CreatureCellRenderable targetPlayer = null;
+			for(int i = 0; i < 10; i++)
+			{
+				targetPlayer = Utils
+					.findCreatures((creature, data) ->
+						creature.getModelName().toString().contains(".player") &&
+						creature.getHoverName().toLowerCase().startsWith(targetPlayerName)
+					)
+					.stream()
+					.findFirst()
+					.orElse(null)
+				;
+				if(targetPlayer != null) break;
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+			}
+			if(targetPlayer == null)
+			{
+				Utils.consolePrint("Couldn't find any players with name `%s`", targetPlayerName);
+				break;
+			}
+			
 			final int targetX = (int)(targetPlayer.getXPos() / 4f);
 			final int targetY = (int)(targetPlayer.getYPos() / 4f);
 			if(targetX == world.getPlayerCurrentTileX() && targetY == world.getPlayerCurrentTileY())
-				try
-				{
-					ForkJoinPool.managedBlock(new SleepBlocker(1000));
-					continue;
-				}
-				catch(Exception err) { break; }
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
+				continue;
+			}
 			
 			if(!walkPath(targetX, targetY))
 			{
@@ -197,7 +201,7 @@ public class PathingBot extends Bot
 					ForkJoinPool.managedBlock(new SleepBlocker(5000));
 					continue;
 				}
-				catch(Exception err) { break; }
+				catch(Exception err) { Utils.consolePrint("%s", err); }
 			}
 		}
 		following = false;
@@ -552,7 +556,7 @@ class PauseBlocker implements ForkJoinPool.ManagedBlocker
 	@Override
 	public boolean block() throws InterruptedException
 	{
-		bot.wait();
+		synchronized(bot) { bot.wait(); }
 		return !bot.getPaused();
 	}
 
