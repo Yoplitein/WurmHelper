@@ -18,6 +18,8 @@ import com.wurmonline.client.game.NearTerrainDataBuffer;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.TerrainDataBuffer;
 import com.wurmonline.client.game.World;
+import com.wurmonline.client.renderer.CreatureData;
+import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.client.renderer.structures.FenceData;
 import com.wurmonline.client.renderer.structures.HouseData;
@@ -90,6 +92,7 @@ public class PathingBot extends Bot
 	{
 		registerInputHandler(Inputs.speed, inPool(this::cmdSpeed));
 		registerInputHandler(Inputs.walkto, inPool(this::cmdWalkto));
+		registerInputHandler(Inputs.follow, inPool(this::cmdFollow));
 	}
 	
 	void cmdSpeed(String[] args)
@@ -122,6 +125,77 @@ public class PathingBot extends Bot
 		Utils.consolePrint("pathfinding to %d,%d", tx, ty);
 		if(!walkPath(tx, ty))
 			Utils.consolePrint("Couldn't find a path/interrupted");
+	}
+	
+	boolean following = false;
+	void cmdFollow(String[] args)
+	{
+		Utils.consolePrint("OwO");
+		if(following)
+		{
+			following = false;
+			return;
+		}
+		
+		if(args == null || args.length < 1)
+		{
+			printInputKeyUsageString(Inputs.follow);
+			return;
+		}
+		
+		ServerConnectionListenerClass sscc = world.getServerConnection().getServerConnectionListener();
+		Map<Long, CreatureCellRenderable> creaturesMap;
+		try { creaturesMap = Utils.getField(sscc, "creatures"); }
+		catch(Exception err) { Utils.consolePrint("%s", err); return; }
+		
+		final String targetPlayerName = args[0].toLowerCase();
+		CreatureCellRenderable targetPlayer = null;
+		for(CreatureCellRenderable creature: creaturesMap.values())
+		{
+			if(
+				!creature.getModelName().toString().contains(".player") ||
+				!creature.getHoverName().toLowerCase().startsWith(targetPlayerName))
+				continue;
+			targetPlayer = creature;
+			break;
+		}
+		if(targetPlayer == null)
+		{
+			Utils.consolePrint("Couldn't find any players matching that name");
+			return;
+		}
+		
+		following = true;
+		while(!exiting && following)
+		{
+			final int targetX = (int)(targetPlayer.getXPos() / 4f);
+			final int targetY = (int)(targetPlayer.getYPos() / 4f);
+			if(targetX == world.getPlayerCurrentTileX() && targetY == world.getPlayerCurrentTileY())
+				try
+				{
+					ForkJoinPool.managedBlock(new SleepBlocker(1000));
+					continue;
+				}
+				catch(Exception err) { break; }
+			
+			if(!walkPath(targetX, targetY))
+			{
+				try
+				{
+					hud.addOnscreenMessage(
+						String.format("Couldn't find path to %s", targetPlayer.getHoverName()),
+						1f,
+						.5f,
+						0f,
+						(byte)1
+					);
+					ForkJoinPool.managedBlock(new SleepBlocker(5000));
+					continue;
+				}
+				catch(Exception err) { break; }
+			}
+		}
+		following = false;
 	}
 	
 	@Override
@@ -284,6 +358,7 @@ public class PathingBot extends Bot
 	{
 		speed("Set speed at which bot will move, in km/h", "real"),
 		walkto("Walk to given tile coordinates", "x,y"),
+		follow("Follow the given player", "name"),
 		;
 		
 		String description;
