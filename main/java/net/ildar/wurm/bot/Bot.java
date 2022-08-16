@@ -78,6 +78,10 @@ public abstract class Bot extends Thread {
         }
         Utils.consolePrint(getClass().getSimpleName() + " is paused.");
     }
+    
+    public boolean getPaused() {
+        return paused;
+    }
 
     public synchronized void setResumed() {
         paused = false;

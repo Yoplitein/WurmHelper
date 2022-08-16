@@ -1,13 +1,5 @@
 package net.ildar.wurm;
 
-import com.wurmonline.client.game.PlayerObj;
-import com.wurmonline.client.game.SkillLogicSet;
-import com.wurmonline.client.game.World;
-import com.wurmonline.client.game.inventory.InventoryMetaItem;
-import com.wurmonline.client.renderer.gui.*;
-import org.gotti.wurmunlimited.modloader.ReflectionUtil;
-import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
@@ -18,6 +10,22 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
+
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
+import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
+
+import com.wurmonline.client.game.PlayerObj;
+import com.wurmonline.client.game.SkillLogicSet;
+import com.wurmonline.client.game.World;
+import com.wurmonline.client.game.inventory.InventoryMetaItem;
+import com.wurmonline.client.renderer.gui.InventoryListComponent;
+import com.wurmonline.client.renderer.gui.InventoryWindow;
+import com.wurmonline.client.renderer.gui.ItemListWindow;
+import com.wurmonline.client.renderer.gui.MindLogicCalculator;
+import com.wurmonline.client.renderer.gui.PaperDollInventory;
+import com.wurmonline.client.renderer.gui.PaperDollSlot;
+import com.wurmonline.client.renderer.gui.WurmComponent;
+import com.wurmonline.client.renderer.gui.WurmTreeList;
 
 public class Utils {
     //used to synchronize server calls
@@ -632,4 +640,47 @@ public class Utils {
             e.printStackTrace();
         }
     }
+    
+    @FunctionalInterface
+    public static interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+    
+    public static boolean printExceptions(ThrowingRunnable fn, String fmt, Object... args) {
+        try {
+            fn.run();
+            return true;
+        } catch (Exception err) {
+            String callingClass = err.getStackTrace()[2].getClassName();
+            Utils.consolePrint(
+                String.format("%s: %s", callingClass, fmt), // preserve format arg numbering
+                err.getClass().getName(),
+                err.getMessage(),
+                args
+            );
+            err.printStackTrace();
+            return false;
+        }
+    }
+    
+    public static void rethrow(ThrowingRunnable fn) {
+		try {
+            fn.run();
+        } catch(Exception err) {
+            throw new RuntimeException(err);
+        }
+	}
+    
+    @FunctionalInterface
+    public static interface ThrowingProducer<T> {
+        T get() throws Exception;
+    }
+    
+    public static <T> T rethrow(ThrowingProducer<T> fn) {
+		try {
+            return fn.get();
+        } catch(Exception err) {
+            throw new RuntimeException(err);
+        }
+	}
 }
