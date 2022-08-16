@@ -70,7 +70,7 @@ public class PathingBot extends Bot
 	
 	boolean exiting = false;
 	
-	static final float tickDelta = 1 / 5f;
+	static final float tickDelta = 1 / 6f;
 	float topSpeedMPS = (15f * 1000) / 60 / 60;
 	
 	InputHandler inPool(InputHandler fn)
@@ -264,8 +264,22 @@ public class PathingBot extends Bot
 			Utils.consolePrint("path: %s", path);
 			if(path == null) return false;
 			for(Vec2i tileCoords: path)
+			{
+				final Vec2i dir = new Vec2i(tileCoords.x - world.getPlayerCurrentTileX(), tileCoords.y - world.getPlayerCurrentTileY());
+				float yaw = Float.NaN;
+				if(dir.x < 0)
+					yaw = 270;
+				else if(dir.x > 0)
+					yaw = 90;
+				else if(dir.y < 0)
+					yaw = 0;
+				else if(dir.y > 0)
+					yaw = 180;
+				Utils.turnPlayer(yaw, Float.NaN);
+				
 				if(!walkLine(tileCoords.x, tileCoords.y))
 					return false;
+			}
 			
 			return true;
 		}
