@@ -57,7 +57,7 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
     Registry serverRegistry;
     
     boolean syncTarget;
-    static final long syncTargetDelay = 250; // doesn't need to be as fine grained
+    static final long syncTargetDelay = 500; // doesn't need to be as fine grained
     boolean syncPosition;
     boolean syncHeading;
     long syncDelay = 50;
@@ -860,19 +860,23 @@ public class RMIBot extends Bot implements BotServer, BotClient, Executor
                     return;
                 }
                 
-                // everyone should target the creature damaging the most hurt player
-                // if everyone is at full health this will pick a semi-random target
-                CombatInfo mostHurtPlayer = infos
+                // TODO: everyone should target the creature damaging the most hurt player
+                // but need to parse `CombatInfo.opponent`
+                /*CombatInfo mostHurtPlayer = infos
                     .stream()
                     .min((l, r) -> Float.compare(l.playerHealth, r.playerHealth))
                     .get()
                 ;
-                long target = mostHurtPlayer.target; // FIXME: get opponent
+                long target = mostHurtPlayer.opponent;
                 if(target == -10) // the most hurt player isn't actually fighting anything
                 {
                     Utils.consolePrint("Choosing semi random target");
                     target = targetSet.iterator().next();
-                }
+                }*/
+                // temp: prefer master's target
+                long target = infos.get(0).target;
+                if(target < 0)
+                    target = targetSet.iterator().next();
                 
                 attack(target);
                 clients.attack(target);
