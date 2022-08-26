@@ -116,6 +116,13 @@ public class PathingBot extends Bot
 		);
 	}
 	
+	void enforceNoTasksRunning()
+	{
+		if(walking || following || murdering)
+			throw new RuntimeException("Another task is already enabled");
+	}
+	
+	boolean walking = false;
 	void cmdWalkto(String[] args)
 	{
 		if(args == null || args.length < 2)
@@ -124,17 +131,15 @@ public class PathingBot extends Bot
 			return;
 		}
 		
+		enforceNoTasksRunning();
+		walking = true;
+		
 		int tx = Integer.parseInt(args[0]);
 		int ty = Integer.parseInt(args[1]);
 		Utils.consolePrint("Pathfinding to %d,%d", tx, ty);
 		if(!walkPath(tx, ty))
 			Utils.consolePrint("Couldn't find a path/interrupted");
-	}
-	
-	void enforceNoTasksRunning()
-	{
-		if(following || murdering)
-			throw new RuntimeException("Another task is already enabled");
+		walking = false;
 	}
 	
 	boolean following = false;
