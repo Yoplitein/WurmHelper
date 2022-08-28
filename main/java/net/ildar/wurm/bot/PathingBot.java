@@ -705,7 +705,10 @@ class CollisionCache
 	
 	public boolean isPassable(int tileX, int tileY, Dir direction)
 	{
-		final Vec2i pos = posInPVS(tileX, tileY);
+		final Vec2i pos;
+		try { pos  = posInPVS(tileX, tileY); }
+		catch(IllegalArgumentException e) { return false; }
+		
 		final int index = pos.y * pvsDiameter + pos.x;
 		final byte flags = cache[index];
 		switch(direction)
