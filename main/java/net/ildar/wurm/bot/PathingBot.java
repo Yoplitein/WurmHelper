@@ -137,7 +137,7 @@ public class PathingBot extends Bot
 		int tx = Integer.parseInt(args[0]);
 		int ty = Integer.parseInt(args[1]);
 		Utils.consolePrint("Pathfinding to %d,%d", tx, ty);
-		if(!walkPath(tx, ty))
+		if(walkPath(tx, ty) != WalkStatus.complete)
 			Utils.consolePrint("Couldn't find a path/interrupted");
 		walking = false;
 	}
@@ -192,7 +192,10 @@ public class PathingBot extends Bot
 				continue;
 			}
 			
-			if(!walkPath(targetX, targetY))
+			WalkStatus res = walkPath(targetX, targetY);
+			if(res == WalkStatus.interrupted)
+				continue;
+			else if(res == WalkStatus.noPath)
 			{
 				try
 				{
@@ -267,7 +270,10 @@ public class PathingBot extends Bot
 				}
 				
 				if(Utils.sqdistFromPlayer(target) > 4 * 4)
-					if(!walkPath((int)(target.getXPos() / 4f), (int)(target.getYPos() / 4f)))
+				{
+					final Vec2i targetPos = new Vec2i((int)(target.getXPos() / 4f), (int)(target.getYPos() / 4f));
+					WalkStatus res = walkPath(targetPos.x, targetPos.y);
+					if(res == WalkStatus.noPath)
 					{
 						ignoredCreatures.add(target.getId());
 						target = null;
@@ -282,6 +288,7 @@ public class PathingBot extends Bot
 						Vector2f remainder = new Vector2f(target.getXPos(), target.getYPos());
 						remainder.subtract(world.getPlayerPosX(), world.getPlayerPosY()); */
 					}
+				}
 				
 				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
 				if(exiting || !murdering) break outer;
@@ -335,9 +342,16 @@ public class PathingBot extends Bot
 		
 	}
 	
-	// move in straight line from current tile to given tile
-	// returns whether walking finished without interruption
-	boolean walkLine(int tileX, int tileY)
+	static enum WalkStatus
+	{
+		complete,
+		interrupted,
+		noPath,
+		;
+	}
+	
+	// move in straight line from current tile to given tile, without checking for collisions
+	WalkStatus walkLine(int tileX, int tileY)
 	{
 		// always move from center to center
 		Utils.moveToCenter();
@@ -353,7 +367,7 @@ public class PathingBot extends Bot
 		while(!exiting && dist > 0)
 		{
 			if(!waitOnPauseFJ())
-				return false;
+				return WalkStatus.interrupted;
 			
 			float toMove = Math.min(dist, topSpeedMPS * tickDelta);
 			dist -= toMove;
@@ -362,19 +376,18 @@ public class PathingBot extends Bot
 			Utils.movePlayer(plyPos.x, plyPos.y);
 			
 			try { ForkJoinPool.managedBlock(new SleepBlocker((long)(1000 * tickDelta))); }
-			catch(InterruptedException err) { return false; }
+			catch(InterruptedException err) { return WalkStatus.interrupted; }
 		}
-		return true;
+		return WalkStatus.complete;
 	}
 	
 	// finds and then moves along an unobstructed path from current tile to given tile
-	// returns false if a path could not be found, or walking was interrupted
-	boolean walkPath(int tileX, int tileY)
+	WalkStatus walkPath(int tileX, int tileY)
 	{
 		try
 		{
 			final Collection<Vec2i> path = findPath(tileX, tileY);
-			if(path == null) return false;
+			if(path == null) return WalkStatus.noPath;
 			for(Vec2i tileCoords: path)
 			{
 				final Vec2i dir = new Vec2i(tileCoords.x - world.getPlayerCurrentTileX(), tileCoords.y - world.getPlayerCurrentTileY());
@@ -389,17 +402,16 @@ public class PathingBot extends Bot
 					yaw = 180;
 				Utils.turnPlayer(yaw, Float.NaN);
 				
-				if(!walkLine(tileCoords.x, tileCoords.y))
-					return false;
+				if(walkLine(tileCoords.x, tileCoords.y) == WalkStatus.interrupted)
+					return WalkStatus.interrupted;
 			}
-			
-			return true;
+			return WalkStatus.complete;
 		}
 		catch(Exception err)
 		{
 			Utils.consolePrint("Uncaught %s in walkPath: %s", err.getClass().getName(), err.getMessage());
 			err.printStackTrace();
-			return false;
+			return WalkStatus.interrupted;
 		}
 	}
 	
@@ -480,7 +492,7 @@ public class PathingBot extends Bot
 		return path;
 	}
 	
-	enum Inputs implements Bot.InputKey
+	static enum Inputs implements Bot.InputKey
 	{
 		speed("Set speed at which bot will move, in km/h", "real"),
 		walkto("Walk to given tile coordinates", "x,y"),
