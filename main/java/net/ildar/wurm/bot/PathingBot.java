@@ -13,6 +13,7 @@ import java.util.PriorityQueue;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import com.wurmonline.client.comm.ServerConnectionListenerClass;
@@ -162,7 +163,7 @@ public class PathingBot extends Bot
 		walking = true;
 		
 		Utils.consolePrint("Pathfinding to %d,%d", target.x, target.y);
-		if(walkPath(target.x, target.y) != WalkStatus.complete)
+		if(walkPath(() -> target) != WalkStatus.complete)
 			Utils.consolePrint("Couldn't find a path/interrupted");
 		walking = false;
 	}
@@ -188,10 +189,10 @@ public class PathingBot extends Bot
 		following = true;
 		while(!exiting && following)
 		{
-			CreatureCellRenderable targetPlayer = null;
+			CreatureCellRenderable _targetPlayer = null;
 			for(int i = 0; i < 10; i++)
 			{
-				targetPlayer = Utils
+				_targetPlayer = Utils
 					.findCreatures((creature, data) ->
 						creature.getModelName().toString().contains(".player") &&
 						creature.getHoverName().toLowerCase().startsWith(targetPlayerName)
@@ -200,24 +201,28 @@ public class PathingBot extends Bot
 					.findFirst()
 					.orElse(null)
 				;
-				if(targetPlayer != null) break;
+				if(_targetPlayer != null) break;
 				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
 			}
-			if(targetPlayer == null)
+			if(_targetPlayer == null)
 			{
 				Utils.consolePrint("Couldn't find any players with name `%s`", targetPlayerName);
 				break;
 			}
 			
-			final int targetX = (int)(targetPlayer.getXPos() / 4f);
-			final int targetY = (int)(targetPlayer.getYPos() / 4f);
-			if(targetX == world.getPlayerCurrentTileX() && targetY == world.getPlayerCurrentTileY())
+			final CreatureCellRenderable targetPlayer = _targetPlayer;
+			final Supplier<Vec2i> targetPos = () -> new Vec2i(
+				(int)(targetPlayer.getXPos() / 4f),
+				(int)(targetPlayer.getYPos() / 4f)
+			);
+			final Vec2i currentPos = targetPos.get();
+			if(currentPos.x == world.getPlayerCurrentTileX() && currentPos.y == world.getPlayerCurrentTileY())
 			{
-				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
 				continue;
 			}
 			
-			WalkStatus res = walkPath(targetX, targetY);
+			WalkStatus res = walkPath(targetPos);
 			if(res == WalkStatus.interrupted)
 				continue;
 			else if(res == WalkStatus.noPath)
@@ -296,8 +301,12 @@ public class PathingBot extends Bot
 				
 				if(Utils.sqdistFromPlayer(target) > 4 * 4)
 				{
-					final Vec2i targetPos = new Vec2i((int)(target.getXPos() / 4f), (int)(target.getYPos() / 4f));
-					WalkStatus res = walkPath(targetPos.x, targetPos.y);
+					final CreatureCellRenderable _target = target; // capture restrictions
+					final Supplier<Vec2i> targetPos = () -> new Vec2i(
+						(int)(_target.getXPos() / 4f),
+						(int)(_target.getYPos() / 4f)
+					);
+					WalkStatus res = walkPath(targetPos);
 					if(res == WalkStatus.noPath)
 					{
 						ignoredCreatures.add(target.getId());
@@ -407,11 +416,12 @@ public class PathingBot extends Bot
 	}
 	
 	// finds and then moves along an unobstructed path from current tile to given tile
-	WalkStatus walkPath(int tileX, int tileY)
+	WalkStatus walkPath(Supplier<Vec2i> target)
 	{
 		try
 		{
-			final Collection<Vec2i> path = findPath(tileX, tileY);
+			final Vec2i pathTarget = target.get();
+			final Collection<Vec2i> path = findPath(pathTarget.x, pathTarget.y);
 			if(path == null) return WalkStatus.noPath;
 			boolean startingTile = true;
 			for(Vec2i tileCoords: path)
@@ -425,6 +435,9 @@ public class PathingBot extends Bot
 				}
 				
 				if(walkLine(tileCoords.x, tileCoords.y) == WalkStatus.interrupted)
+					return WalkStatus.interrupted;
+				
+				if(!pathTarget.equals(target.get()))
 					return WalkStatus.interrupted;
 			}
 			return WalkStatus.complete;
