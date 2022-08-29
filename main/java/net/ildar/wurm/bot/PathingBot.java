@@ -41,7 +41,7 @@ import net.ildar.wurm.annotations.BotInfo;
 public class PathingBot extends Bot
 {
 	final ForkJoinPool pool = new ForkJoinPool(
-		8,
+		4,
 		new ForkJoinPool.ForkJoinWorkerThreadFactory()
 		{
 			int counter = 0;
@@ -413,19 +413,16 @@ public class PathingBot extends Bot
 		{
 			final Collection<Vec2i> path = findPath(tileX, tileY);
 			if(path == null) return WalkStatus.noPath;
+			boolean startingTile = true;
 			for(Vec2i tileCoords: path)
 			{
-				final Vec2i dir = new Vec2i(tileCoords.x - world.getPlayerCurrentTileX(), tileCoords.y - world.getPlayerCurrentTileY());
-				float yaw = Float.NaN;
-				if(dir.x < 0)
-					yaw = 270;
-				else if(dir.x > 0)
-					yaw = 90;
-				else if(dir.y < 0)
-					yaw = 0;
-				else if(dir.y > 0)
-					yaw = 180;
-				Utils.turnPlayer(yaw, Float.NaN);
+				if(startingTile)
+					startingTile = false;
+				else
+				{
+					final Dir dir = Dir.of(new Vec2i(tileCoords.x - world.getPlayerCurrentTileX(), tileCoords.y - world.getPlayerCurrentTileY()));
+					Utils.turnPlayer(dir.yaw(), Float.NaN);
+				}
 				
 				if(walkLine(tileCoords.x, tileCoords.y) == WalkStatus.interrupted)
 					return WalkStatus.interrupted;
@@ -442,17 +439,22 @@ public class PathingBot extends Bot
 	
 	ArrayList<Vec2i> findPath(int tileX, int tileY)
 	{
-		final long startTime = System.nanoTime();
+		// final long startTime = System.nanoTime(); // perf logging
 		final Vec2i startTile = new Vec2i(world.getPlayerCurrentTileX(), world.getPlayerCurrentTileY());
 		final Vec2i endTile = new Vec2i(tileX, tileY);
 		CollisionCache cache = new CollisionCache();
 		cache.refresh();
 		
+		// all nodes that have been created; nodes may be removed from path but added again later
+		// if a cheaper path through them has been found
 		HashMap<Vec2i, PathNode> populated = new HashMap<>();
-		HashSet<Vec2i> enqueued = new HashSet<>(); // set of coords in queue, for faster search
+		
+		// set of coords in queue, to elide (linear) search
+		HashSet<Vec2i> enqueued = new HashSet<>();
+		
 		PriorityQueue<PathNode> queue = new PriorityQueue<>(PathNode::compare);
 		queue.add(new PathNode(startTile, 0, endTile, null));
-		PathNode endNode = null;
+		PathNode endNode = null; // node for goal tile
 		while(!queue.isEmpty())
 		{
 			PathNode head = queue.poll();
@@ -465,13 +467,73 @@ public class PathingBot extends Bot
 			
 			for(Dir dir: Dir.values())
 			{
+				if(dir == Dir.all)
+					continue;
+				
 				final Vec2i neighborTile = new Vec2i(head.pos.x + dir.offset.x, head.pos.y + dir.offset.y);
 				if(!cache.isPassable(neighborTile.x, neighborTile.y, Dir.all))
 					continue;
 				
-				PathNode neighbor;
-				final boolean edgePassable = cache.isPassable(head.pos.x, head.pos.y, dir);
+				final boolean edgePassable;
+				if(!dir.diagonal())
+					edgePassable = cache.isPassable(head.pos.x, head.pos.y, dir);
+				else
+				{
+					switch(dir)
+					{
+						// - north and east borders of current tile must be passable
+						// - both tiles to north and east must be passable
+						// - east border of north tile/north border of east tile must be passable
+						// similarly for other cases
+						case northeast:
+							edgePassable =
+								cache.isPassable(head.pos.x, head.pos.y, Dir.north) &&
+								cache.isPassable(head.pos.x, head.pos.y, Dir.east) &&
+								cache.isPassable(head.pos.x + Dir.east.offset.x, head.pos.y, Dir.all) &&
+								cache.isPassable(head.pos.x + Dir.east.offset.x, head.pos.y, Dir.north) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.north.offset.y, Dir.all) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.north.offset.y, Dir.east)
+							;
+							break;
+						case northwest:
+							edgePassable =
+								cache.isPassable(head.pos.x, head.pos.y, Dir.north) &&
+								cache.isPassable(head.pos.x, head.pos.y, Dir.west) &&
+								cache.isPassable(head.pos.x + Dir.west.offset.x, head.pos.y, Dir.all) &&
+								cache.isPassable(head.pos.x + Dir.west.offset.x, head.pos.y, Dir.north) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.north.offset.y, Dir.all) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.north.offset.y, Dir.west)
+							;
+							break;
+						case southeast:
+							edgePassable =
+								cache.isPassable(head.pos.x, head.pos.y, Dir.south) &&
+								cache.isPassable(head.pos.x, head.pos.y, Dir.east) &&
+								cache.isPassable(head.pos.x + Dir.east.offset.x, head.pos.y, Dir.all) &&
+								cache.isPassable(head.pos.x + Dir.east.offset.x, head.pos.y, Dir.south) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.south.offset.y, Dir.all) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.south.offset.y, Dir.east)
+							;
+							break;
+						case southwest:
+							edgePassable =
+								cache.isPassable(head.pos.x, head.pos.y, Dir.south) &&
+								cache.isPassable(head.pos.x, head.pos.y, Dir.west) &&
+								cache.isPassable(head.pos.x + Dir.west.offset.x, head.pos.y, Dir.all) &&
+								cache.isPassable(head.pos.x + Dir.west.offset.x, head.pos.y, Dir.south) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.south.offset.y, Dir.all) &&
+								cache.isPassable(head.pos.x, head.pos.y + Dir.south.offset.y, Dir.west)
+							;
+							break;
+						default:
+							throw new IllegalArgumentException(
+								String.format("Dir %s is not diagonal", dir)
+							);
+					}
+				}
+				
 				final int cost = edgePassable ? head.distFromStart + 1 : Integer.MAX_VALUE;
+				PathNode neighbor;
 				if(!populated.containsKey(neighborTile))
 				{
 					neighbor = new PathNode(neighborTile, cost, endTile, head);
@@ -504,6 +566,7 @@ public class PathingBot extends Bot
 			return null;
 		}
 		
+		// trace path backwards from goal -> player
 		ArrayList<Vec2i> path = new ArrayList<>();
 		PathNode node = endNode;
 		while(node != null)
@@ -511,9 +574,9 @@ public class PathingBot extends Bot
 			path.add(node.pos);
 			node = node.previous;
 		}
-		Collections.reverse(path);
-		final long endTime = System.nanoTime();
-		Utils.consolePrint("Found path in %.4fms", (endTime - startTime) / 1_000_000.0);
+		Collections.reverse(path); // needed path is player -> goal
+		// final long endTime = System.nanoTime();
+		// Utils.consolePrint("Found path in %.4fms", (endTime - startTime) / 1_000_000.0);
 		return path;
 	}
 	
@@ -651,15 +714,52 @@ class Vec2i
 enum Dir
 {
 	all(new Vec2i(0, 0)),
+	
+	northeast(new Vec2i(1, -1)),
+	northwest(new Vec2i(-1, -1)),
+	southeast(new Vec2i(1, 1)),
+	southwest(new Vec2i(-1, 1)),
+	
 	north(new Vec2i(0, -1)),
 	east(new Vec2i(1, 0)),
 	south(new Vec2i(0, 1)),
-	west(new Vec2i(-1, 0));
+	west(new Vec2i(-1, 0)),
+	;
 	
-	Vec2i offset;
+	final Vec2i offset;
 	Dir(Vec2i offset)
 	{
 		this.offset = offset;
+	}
+	
+	public static Dir of(Vec2i vec)
+	{
+		for(Dir val: values())
+			if(val.offset.equals(vec))
+				return val;
+		return Dir.all;
+	}
+	
+	boolean diagonal()
+	{
+		return offset.x != 0 && offset.y != 0;
+	}
+	
+	public float yaw()
+	{
+		switch(this)
+		{
+			case northeast: return 45;
+			case northwest: return 315;
+			case southeast: return 135;
+			case southwest: return 225;
+			case north: return 0;
+			case east: return 90;
+			case south: return 180;
+			case west: return 270;
+			case all:
+		}
+		return 22.5f;
 	}
 }
 
