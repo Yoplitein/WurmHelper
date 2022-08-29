@@ -20,6 +20,8 @@ import com.wurmonline.client.game.NearTerrainDataBuffer;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.TerrainDataBuffer;
 import com.wurmonline.client.game.World;
+import com.wurmonline.client.renderer.PickableUnit;
+import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.client.renderer.gui.TargetWindow;
@@ -125,19 +127,42 @@ public class PathingBot extends Bot
 	boolean walking = false;
 	void cmdWalkto(String[] args)
 	{
+		final Vec2i target;
 		if(args == null || args.length < 2)
 		{
-			printInputKeyUsageString(Inputs.walkto);
-			return;
+			final PickableUnit unit = world.getCurrentHoveredObject();
+			if(!(unit instanceof TilePicker))
+			{
+				Utils.consolePrint("No coords specified and not hovering over any tile");
+				printInputKeyUsageString(Inputs.walkto);
+				return;
+			}
+			
+			final TilePicker tile = (TilePicker)unit;
+			try
+			{
+				target = new Vec2i(
+					Utils.getField(tile, "x"),
+					Utils.getField(tile, "y")
+				);
+			}
+			catch(Exception err)
+			{
+				Utils.consolePrint("Couldn't get coords for hovered tile:\n%s", err);
+				return;
+			}
 		}
+		else
+			target = new Vec2i(
+				Integer.parseInt(args[0]),
+				Integer.parseInt(args[1])
+			);
 		
 		enforceNoTasksRunning();
 		walking = true;
 		
-		int tx = Integer.parseInt(args[0]);
-		int ty = Integer.parseInt(args[1]);
-		Utils.consolePrint("Pathfinding to %d,%d", tx, ty);
-		if(walkPath(tx, ty) != WalkStatus.complete)
+		Utils.consolePrint("Pathfinding to %d,%d", target.x, target.y);
+		if(walkPath(target.x, target.y) != WalkStatus.complete)
 			Utils.consolePrint("Couldn't find a path/interrupted");
 		walking = false;
 	}
