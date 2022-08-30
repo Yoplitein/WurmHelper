@@ -11,12 +11,13 @@ import java.util.Map;
 import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
+import org.gotti.wurmunlimited.modloader.ReflectionUtil;
+
 import com.wurmonline.client.comm.ServerConnectionListenerClass;
 import com.wurmonline.client.comm.SimpleServerConnectionClass;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
-import com.wurmonline.client.renderer.CreatureData;
 import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.cell.CellRenderable;
@@ -25,11 +26,8 @@ import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
-import com.wurmonline.communication.SocketConnection;
 import com.wurmonline.mesh.Tiles.Tile;
 import com.wurmonline.shared.constants.PlayerAction;
-
-import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
@@ -430,8 +428,10 @@ public class AssistantBot extends Bot {
                     groomingQueued.clear();
                     groomingFailed = false;
                     
-                    List<CreatureCellRenderable> creatures = findGroomableCreatures(
+                    List<CreatureCellRenderable> creatures = Utils.findCreatures(
                         (creature, data) ->
+                            Utils.isGroomableCreature(creature) &&
+                            Utils.isNearbyPlayer(creature) &&
                             !groomedCreatures.containsKey(creature.getId())
                     );
                     int actionsLeft = maxActions - creationWindow.getActionInUse();
@@ -1103,10 +1103,9 @@ public class AssistantBot extends Bot {
     
     private List<GroundItemCellRenderable> findCorpses(BiPredicate<GroundItemCellRenderable, GroundItemData> predicate) {
         predicate = ((BiPredicate<GroundItemCellRenderable, GroundItemData>)this::isCorpse)
-            .and((item, data) -> isNearby(item))
+            .and((item, data) -> Utils.isNearbyPlayer(item))
             .and(predicate)
         ;
-        
         List<GroundItemCellRenderable> items = new ArrayList<>();
         try {
             ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
@@ -1135,17 +1134,6 @@ public class AssistantBot extends Bot {
         return item.getHoverName().toLowerCase().startsWith("corpse of");
     }
     
-    private static final float maxActionSqDistance = 5 * 5;
-    private boolean isNearby(CellRenderable obj) {
-        final float px = WurmHelper.hud.getWorld().getPlayerPosX();
-        final float py = WurmHelper.hud.getWorld().getPlayerPosY();
-        final double sqDist =
-            Math.pow(px - obj.getXPos(), 2f) +
-            Math.pow(py - obj.getYPos(), 2f)
-        ;
-        return sqDist < maxActionSqDistance;
-    }
-    
     private boolean needsPickaxeToBury(GroundItemCellRenderable item) {
         if (item.getLayer() < 0)
             return true;
@@ -1163,63 +1151,6 @@ public class AssistantBot extends Bot {
             tileID == Tile.TILE_ROCK.id ||
             tileID == Tile.TILE_CLIFF.id
         ;
-    }
-    
-    static final String[] groomableCreatureNames = {
-        "bison",
-        "bull",
-        "calf",
-        "chicken",
-        "cow",
-        "deer",
-        "dog",
-        "foal",
-        "hen",
-        "horse",
-        "hyena",
-        "lamb",
-        "pheasant",
-        "pig",
-        "ram",
-        "rooster",
-        "seal",
-        "sheep",
-        "unicorn",
-    };
-    private boolean isGroomable(CreatureCellRenderable creature, CreatureData Data) {
-        final String name = creature.getHoverName().toLowerCase();
-        return Arrays
-            .stream(groomableCreatureNames)
-            .anyMatch(allowed -> name.contains(allowed))
-        ;
-    }
-    
-    private List<CreatureCellRenderable> findGroomableCreatures(BiPredicate<CreatureCellRenderable, CreatureData> predicate) {
-        predicate = ((BiPredicate<CreatureCellRenderable, CreatureData>)this::isGroomable)
-            .and((creature, data) -> isNearby(creature))
-            .and(predicate)
-        ;
-        
-        List<CreatureCellRenderable> creatures = new ArrayList<>();
-        try {
-            ServerConnectionListenerClass sscc = WurmHelper.hud.getWorld().getServerConnection().getServerConnectionListener();
-            Map<Long, CreatureCellRenderable> creaturesMap = Utils.getField(sscc, "creatures");
-            for(CreatureCellRenderable creature: creaturesMap.values()) {
-                CreatureData data;
-                try {
-                    data = Utils.getField(creature, "creature");
-                } catch (Exception e) {
-                    Utils.consolePrint(e.toString());
-                    continue;
-                }
-                
-                if(predicate.test(creature, data))
-                    creatures.add(creature);
-            }
-        } catch (Exception e) {
-            Utils.consolePrint(e.toString());
-        }
-        return creatures;
     }
     
     private enum InputKey implements Bot.InputKey {

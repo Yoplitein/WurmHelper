@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -724,5 +725,34 @@ public class Utils {
     private static final float maxActionSqDistance = 5 * 5;
     public static boolean isNearbyPlayer(CellRenderable obj) {
         return sqdistFromPlayer(obj) < maxActionSqDistance;
+    }
+    
+    private static final String[] groomableCreatureNames = {
+        "bison",
+        "bull",
+        "calf",
+        "chicken",
+        "cow",
+        "deer",
+        "dog",
+        "foal",
+        "hen",
+        "horse",
+        "hyena",
+        "lamb",
+        "pheasant",
+        "pig",
+        "ram",
+        "rooster",
+        "seal",
+        "sheep",
+        "unicorn",
+    };
+    public static boolean isGroomableCreature(CreatureCellRenderable creature) {
+        final String name = creature.getHoverName().toLowerCase();
+        return Arrays
+            .stream(groomableCreatureNames)
+            .anyMatch(allowed -> name.contains(allowed))
+        ;
     }
 }
