@@ -20,10 +20,10 @@ import com.wurmonline.client.game.World;
 import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.GroundItemData;
 import com.wurmonline.client.renderer.PickableUnit;
-import com.wurmonline.client.renderer.cell.CellRenderable;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
 import com.wurmonline.client.renderer.cell.GroundItemCellRenderable;
 import com.wurmonline.client.renderer.gui.CreationWindow;
+import com.wurmonline.client.renderer.gui.InventoryListComponent;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
 import com.wurmonline.mesh.Tiles.Tile;
@@ -144,6 +144,13 @@ public class AssistantBot extends Bot {
         registerInputHandler(AssistantBot.InputKey.bubc, input -> addCorpseBlacklist(null));
         registerInputHandler(AssistantBot.InputKey.groom, input -> toggleGrooming());
         registerInputHandler(AssistantBot.InputKey.v, input -> toggleVerbosity());
+        registerInputHandler(AssistantBot.InputKey.pave,
+            input -> pave(false, String.join(" ", input).toLowerCase())
+        );
+        registerInputHandler(AssistantBot.InputKey.pavec,
+            input -> pave(true, String.join(" ", input).toLowerCase())
+        );
+        registerInputHandler(AssistantBot.InputKey.paveclear, input -> paveClear());
     }
 
     @Override
@@ -1153,6 +1160,54 @@ public class AssistantBot extends Bot {
         ;
     }
     
+    private HashMap<String, HashSet<Long>> usedPavers = new HashMap<>();
+    private void pave(boolean corner, String itemName)
+    {
+        if(itemName == null || itemName.length() == 0)
+        {
+            printInputKeyUsageString(InputKey.pave);
+            return;
+        }
+        
+        final InventoryListComponent plyInventory = WurmHelper.hud.getInventoryWindow().getInventoryListComponent();
+        final List<InventoryMetaItem> items = Utils.getInventoryItems(plyInventory, itemName);
+        final HashSet<Long> used = usedPavers.computeIfAbsent(itemName, _k -> new HashSet<>());
+        items.removeIf(item -> used.contains(item.getId()));
+        if(items.isEmpty())
+        {
+            final String msg = String.format("Couldn't find any items named `%s`", itemName);
+            WurmHelper.hud.addOnscreenMessage(msg, 1f, .5f, 0f, (byte)1);
+            Utils.consolePrint(msg);
+            return;
+        }
+        
+        PickableUnit target = WurmHelper.hud.getWorld().getCurrentHoveredObject();
+        if(target == null)
+        {
+            final String msg = "Not hovering over anything";
+            WurmHelper.hud.addOnscreenMessage(msg, 1f, .5f, 0f, (byte)1);
+            Utils.consolePrint(msg);
+            return;
+        }
+        
+        final PlayerAction action;
+        if(itemName.equals("catseye"))
+            action = PlayerAction.PLANT_SIGN;
+        else
+            action = corner ? PlayerAction.PAVE_CORNER : PlayerAction.PAVE;
+        
+        final long nextPaver = items.iterator().next().getId();
+        used.add(nextPaver);
+        WurmHelper.hud.getWorld().getServerConnection().sendAction(nextPaver, new long[]{target.getId()}, action);
+    }
+    
+    private void paveClear()
+    {
+        for(HashSet<Long> set: usedPavers.values())
+            set.clear();
+        Utils.consolePrint("");
+    }
+    
     private enum InputKey implements Bot.InputKey {
         w("Toggle automatic drinking of the liquid the user pointing at", ""),
         wid("Toggle automatic drinking of liquid with provided id", "id"),
@@ -1186,7 +1241,10 @@ public class AssistantBot extends Bot {
         bub("Add keyword to corpse blacklist -- e.g. to prevent bot burying Rift creatures which is set by default", "keyword"),
         bubc("Clear corpse blacklist", ""),
         groom("Toggle grooming of creatures", ""),
-        v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", "");
+        v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", ""),
+        pave("Paving helper that activates new materials", "item name"),
+        pavec("Pave command for tile corners", "item name"),
+        paveclear("Forget which items have already been used for paving", "");
 
         private String description;
         private String usage;
