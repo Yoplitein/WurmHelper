@@ -24,6 +24,7 @@ import com.wurmonline.client.game.World;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
+import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.HeadsUpDisplay;
 import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.client.renderer.structures.FenceData;
@@ -277,6 +278,9 @@ public class PathingBot extends Bot
 		
 		enforceNoTasksRunning();
 		
+		CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
+		Object progressBar = Utils.rethrow(() -> Utils.getField(creationWindow, "progressBar"));
+		
 		murdering = true;
 		HashSet<Long> ignoredCreatures = new HashSet<>();
 		List<CreatureCellRenderable> creatures;
@@ -328,6 +332,16 @@ public class PathingBot extends Bot
 				if(exiting || !murdering) break outer;
 			}
 			
+			while(
+				Utils.getPlayerStamina() < 0.99 ||
+				creationWindow.getActionInUse() > 0 ||
+				Utils.rethrow(() -> Utils.<Object, Float>getField(progressBar, "progress")) > 0f
+			)
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
+				if(exiting || !murdering) break outer;
+			}
+			
 			creatures = Utils.findCreatures((creature, data) ->
 				!ignoredCreatures.contains(creature.getId()) &&
 				!creature.isItem() &&
@@ -373,7 +387,6 @@ public class PathingBot extends Bot
 					PathingBot.class.getSimpleName()
 				);
 		}
-		
 	}
 	
 	static enum WalkStatus
