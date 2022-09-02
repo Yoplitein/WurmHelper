@@ -1076,7 +1076,7 @@ class CollisionCache
 		// if(tileX == world.getPlayerCurrentTileX() && tileY == world.getPlayerCurrentTileY())
 		// 	Utils.consolePrint("nw %.4f ne %.4f sw %.4f se %.4f", nw, ne, sw, se);
 		
-		final float maxSlope = 22 / 10f;
+		final float maxSlope = 30 / 10f;
 		final float minHeight = -15 / 10f;
 		if(absdiff(nw, ne) > maxSlope || absdiff(nw, sw) > maxSlope)
 			return false;
