@@ -370,7 +370,8 @@ public class PathingBot extends Bot
 	}
 	
 	boolean grooming = false;
-	Runnable onCreatureGroomed = null;
+	Runnable onGroomingStart = null;
+	Runnable onGroomingDone = null;
 	void cmdGroom(String[] args)
 	{
 		if(grooming)
@@ -395,8 +396,18 @@ public class PathingBot extends Bot
 		final HashSet<Long> ignoredCreatures = new HashSet<>();
 		List<CreatureCellRenderable> creatures;
 		final Cell<CreatureCellRenderable> target = new Cell<>(null);
+		final Cell<Boolean> started = new Cell<>(false);
+		final Cell<Boolean> done = new Cell<>(false);
 		outer: while(!exiting && grooming)
 		{
+			if(done.val)
+			{
+				if(target.val != null)
+					ignoredCreatures.add(target.val.getId());
+				target.val = null;
+				done.val = false;
+			}
+
 			if(target.val == null)
 			{
 				creatures = Utils.findCreatures((creature, data) ->
@@ -416,14 +427,10 @@ public class PathingBot extends Bot
 					Utils.consolePrint("Can't find any creatures to groom");
 					break;
 				}
-
-				onCreatureGroomed = () -> {
-					if(target.val != null)
-					{
-						ignoredCreatures.add(target.val.getId());
-						target.val = null;
-					}
-					onCreatureGroomed = null;
+				
+				onGroomingDone = () -> {
+					done.val = true;
+					onGroomingDone = null;
 				};
 			}
 
@@ -440,7 +447,7 @@ public class PathingBot extends Bot
 				if(res == WalkStatus.noPath)
 				{
 					ignoredCreatures.add(target.val.getId());
-					onCreatureGroomed = null;
+					onGroomingDone = null;
 					target.val = null;
 					hud.sendAction(PlayerAction.NO_TARGET, -1);
 					continue outer;
@@ -450,21 +457,43 @@ public class PathingBot extends Bot
 				break;
 			}
 
+			final long actionSent = System.currentTimeMillis();
+			started.val = false;
+			onGroomingStart = () -> {
+				started.val = true;
+				onGroomingStart = null;
+			};
 			hud.getWorld().getServerConnection().sendAction(
 				brushItem.getId(),
 				new long[]{target.val.getId()},
 				PlayerAction.GROOM
 			);
 			Utils.consolePrint("Grooming `%s`", target.val.getHoverName());
-			do
+			
+			while(!started.val && !done.val)
 			{
 				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
 				if(exiting || !grooming) break outer;
-			} while(
+				
+				// action never started
+				if(System.currentTimeMillis() - actionSent >= 5000)
+				{
+					Utils.consolePrint("Timed out waiting for grooming to start");
+					continue outer;
+				}
+			}
+			// already groomed
+			if(done.val) continue outer;
+
+			while(
 				Utils.getPlayerStamina() < 0.99 ||
 				creationWindow.getActionInUse() > 0 ||
 				Utils.rethrow(() -> Utils.<Object, Float>getField(progressBar, "progress")) > 0f
-			);
+			)
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+				if(exiting || !grooming) break outer;
+			}
 		}
 		grooming = false;
 	}
@@ -473,14 +502,21 @@ public class PathingBot extends Bot
 	void work() throws Exception
 	{
 		registerEventProcessor(
+			line -> line.contains("You start to tend to"),
+			() -> {
+				if(onGroomingStart != null)
+					onGroomingStart.run();
+			}
+		);
+		registerEventProcessor(
 			line ->
 				line.contains("You have now tended to") ||
 				line.contains("is already well tended") ||
 				line.contains("That would be illegal here.")
 			,
 			() -> {
-				if(onCreatureGroomed != null)
-					onCreatureGroomed.run();
+				if(onGroomingDone != null)
+					onGroomingDone.run();
 			}
 		);
 
