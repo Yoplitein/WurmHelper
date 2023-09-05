@@ -427,8 +427,11 @@ public class PathingBot extends Bot
 				};
 			}
 
-			if(Utils.sqdistFromPlayer(target.val) > 4 * 4)
+			while(Utils.sqdistFromPlayer(target.val) > 4 * 4)
 			{
+				if(exiting || !grooming)
+					break outer;
+
 				final Supplier<Vec2i> targetPos = () -> new Vec2i(
 					(int)(target.val.getXPos() / 4f),
 					(int)(target.val.getYPos() / 4f)
@@ -437,12 +440,14 @@ public class PathingBot extends Bot
 				if(res == WalkStatus.noPath)
 				{
 					ignoredCreatures.add(target.val.getId());
+					onCreatureGroomed = null;
 					target.val = null;
 					hud.sendAction(PlayerAction.NO_TARGET, -1);
-					continue;
+					continue outer;
 				}
-				else if(exiting || !grooming)
-					break;
+				else if(res == WalkStatus.interrupted)
+					continue;
+				break;
 			}
 
 			hud.getWorld().getServerConnection().sendAction(
@@ -451,16 +456,15 @@ public class PathingBot extends Bot
 				PlayerAction.GROOM
 			);
 			Utils.consolePrint("Grooming `%s`", target.val.getHoverName());
-			Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
-			while(
+			do
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+				if(exiting || !grooming) break outer;
+			} while(
 				Utils.getPlayerStamina() < 0.99 ||
 				creationWindow.getActionInUse() > 0 ||
 				Utils.rethrow(() -> Utils.<Object, Float>getField(progressBar, "progress")) > 0f
-			)
-			{
-				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
-				if(exiting || !grooming) break outer;
-			}
+			);
 		}
 		grooming = false;
 	}
