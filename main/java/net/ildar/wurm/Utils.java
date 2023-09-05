@@ -744,13 +744,10 @@ public class Utils {
         "foal",
         "hen",
         "horse",
-        "hyena",
         "lamb",
-        "pheasant",
         "pig",
         "ram",
         "rooster",
-        "seal",
         "sheep",
         "unicorn",
     };
@@ -760,5 +757,10 @@ public class Utils {
             .stream(groomableCreatureNames)
             .anyMatch(allowed -> name.contains(allowed))
         ;
+    }
+
+    public static class Cell<T> {
+        public T val;
+        public Cell(T val) { this.val = val; }
     }
 }

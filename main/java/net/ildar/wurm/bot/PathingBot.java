@@ -21,6 +21,7 @@ import com.wurmonline.client.game.NearTerrainDataBuffer;
 import com.wurmonline.client.game.PlayerObj;
 import com.wurmonline.client.game.TerrainDataBuffer;
 import com.wurmonline.client.game.World;
+import com.wurmonline.client.game.inventory.InventoryMetaItem;
 import com.wurmonline.client.renderer.PickableUnit;
 import com.wurmonline.client.renderer.TilePicker;
 import com.wurmonline.client.renderer.cell.CreatureCellRenderable;
@@ -37,6 +38,7 @@ import com.wurmonline.shared.constants.StructureTypeEnum;
 
 import net.ildar.wurm.Utils;
 import net.ildar.wurm.WurmHelper;
+import net.ildar.wurm.Utils.Cell;
 import net.ildar.wurm.annotations.BotInfo;
 
 @BotInfo(abbreviation = "pt", description = "Bot that can perform pathfinding to accomplish its various tasks")
@@ -101,6 +103,7 @@ public class PathingBot extends Bot
 		registerInputHandler(Inputs.walkto, inPool(this::cmdWalkto));
 		registerInputHandler(Inputs.follow, inPool(this::cmdFollow));
 		registerInputHandler(Inputs.murder, inPool(this::cmdMurder));
+		registerInputHandler(Inputs.groom, inPool(this::cmdGroom));
 	}
 	
 	void cmdSpeed(String[] args)
@@ -122,7 +125,7 @@ public class PathingBot extends Bot
 	
 	void enforceNoTasksRunning()
 	{
-		if(walking || following || murdering)
+		if(walking || following || murdering || grooming)
 			throw new RuntimeException("Another task is already enabled");
 	}
 	
@@ -366,9 +369,116 @@ public class PathingBot extends Bot
 		murdering = false;
 	}
 	
+	boolean grooming = false;
+	Runnable onCreatureGroomed = null;
+	void cmdGroom(String[] args)
+	{
+		if(grooming)
+		{
+			grooming = false;
+			return;
+		}
+
+		enforceNoTasksRunning();
+
+		final InventoryMetaItem brushItem = Utils.locateToolItem("grooming brush");
+		if(brushItem == null)
+		{
+			Utils.consolePrint("Cannot groom without a brush!");
+			return;
+		}
+
+		CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
+		Object progressBar = Utils.rethrow(() -> Utils.getField(creationWindow, "progressBar"));
+
+		grooming = true;
+		final HashSet<Long> ignoredCreatures = new HashSet<>();
+		List<CreatureCellRenderable> creatures;
+		final Cell<CreatureCellRenderable> target = new Cell<>(null);
+		outer: while(!exiting && grooming)
+		{
+			if(target.val == null)
+			{
+				creatures = Utils.findCreatures((creature, data) ->
+					!ignoredCreatures.contains(creature.getId()) &&
+					!creature.isItem() &&
+					creature.getKingdomId() == 0 &&
+					!creature.isControlled() &&
+					!creature.getHoverName().startsWith("preserved") &&
+					Utils.isGroomableCreature(creature) &&
+					!petItemRe.matcher(data.getHoverText()).find()
+				);
+				creatures.sort((l, r) -> Float.compare(Utils.sqdistFromPlayer(l), Utils.sqdistFromPlayer(r)));
+
+				target.val = creatures.stream().findFirst().orElse(null);
+				if(target.val == null)
+				{
+					Utils.consolePrint("Can't find any creatures to groom");
+					break;
+				}
+
+				onCreatureGroomed = () -> {
+					if(target.val != null)
+					{
+						ignoredCreatures.add(target.val.getId());
+						target.val = null;
+					}
+					onCreatureGroomed = null;
+				};
+			}
+
+			if(Utils.sqdistFromPlayer(target.val) > 4 * 4)
+			{
+				final Supplier<Vec2i> targetPos = () -> new Vec2i(
+					(int)(target.val.getXPos() / 4f),
+					(int)(target.val.getYPos() / 4f)
+				);
+				WalkStatus res = walkPath(targetPos);
+				if(res == WalkStatus.noPath)
+				{
+					ignoredCreatures.add(target.val.getId());
+					target.val = null;
+					hud.sendAction(PlayerAction.NO_TARGET, -1);
+					continue;
+				}
+				else if(exiting || !grooming)
+					break;
+			}
+
+			hud.getWorld().getServerConnection().sendAction(
+				brushItem.getId(),
+				new long[]{target.val.getId()},
+				PlayerAction.GROOM
+			);
+			Utils.consolePrint("Grooming `%s`", target.val.getHoverName());
+			Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+			while(
+				Utils.getPlayerStamina() < 0.99 ||
+				creationWindow.getActionInUse() > 0 ||
+				Utils.rethrow(() -> Utils.<Object, Float>getField(progressBar, "progress")) > 0f
+			)
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(1000)));
+				if(exiting || !grooming) break outer;
+			}
+		}
+		grooming = false;
+	}
+
 	@Override
 	void work() throws Exception
 	{
+		registerEventProcessor(
+			line ->
+				line.contains("You have now tended to") ||
+				line.contains("is already well tended")
+			,
+			() -> {
+				if(onCreatureGroomed != null)
+					onCreatureGroomed.run();
+			}
+		);
+
 		try
 		{
 			while(isActive())
@@ -609,9 +719,10 @@ public class PathingBot extends Bot
 	static enum Inputs implements Bot.InputKey
 	{
 		speed("Set speed at which bot will move, in km/h", "real"),
-		walkto("Walk to given tile coordinates", "x,y"),
+		walkto("Walk to given tile coordinates", "x y"),
 		follow("Follow the given player", "name"),
 		murder("Find and murder nearby creatures", ""),
+		groom("Find and groom nearby creatures", ""),
 		;
 		
 		String description;
