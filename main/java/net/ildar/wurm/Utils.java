@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiPredicate;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import org.gotti.wurmunlimited.modloader.ReflectionUtil;
 import org.gotti.wurmunlimited.modloader.classhooks.HookManager;
@@ -448,7 +449,12 @@ public class Utils {
     
     public static InventoryMetaItem locateToolItem(String toolName) {
         InventoryListComponent mainInventory = WurmHelper.hud.getInventoryWindow().getInventoryListComponent();
-        List<InventoryMetaItem> items = getInventoryItems(mainInventory, toolName);
+        List<InventoryMetaItem> allItems = getSelectedItems(mainInventory, true, true);
+        Pattern regex = Pattern.compile(String.format("\\b%s\\b", toolName));
+        List<InventoryMetaItem> items = getInventoryItems(
+            allItems,
+            item -> regex.matcher(item.getBaseName()).find()
+        );
         
         if (items.size() == 0) {
             consolePrint("Error: Couldn't find any tools matching `%s`!", toolName);
