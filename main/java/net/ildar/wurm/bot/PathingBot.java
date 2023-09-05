@@ -475,7 +475,8 @@ public class PathingBot extends Bot
 		registerEventProcessor(
 			line ->
 				line.contains("You have now tended to") ||
-				line.contains("is already well tended")
+				line.contains("is already well tended") ||
+				line.contains("That would be illegal here.")
 			,
 			() -> {
 				if(onCreatureGroomed != null)
