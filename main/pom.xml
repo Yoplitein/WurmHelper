@@ -33,8 +33,6 @@
                         <phase>install</phase>
                         <configuration>
                             <tasks>
-                                <copy file="${project.build.directory}/${project.build.finalName}.jar" tofile="${client.location}/mods/${project.parent.artifactId}/${project.parent.artifactId}.jar"/>
-                                <copy file="${project.basedir}/../Mod.properties" tofile="${client.location}/mods/${project.parent.artifactId}.properties"/>
                                 <zip destfile="${project.basedir}/../${project.parent.artifactId}.zip">
                                     <zipfileset dir="${project.build.directory}"
                                                 includes="${project.build.finalName}.jar"
