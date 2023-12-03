@@ -417,7 +417,7 @@ public class WurmHelper implements WurmClientMod, Initable, Configurable, PreIni
             e.printStackTrace();
             return;
         }
-        List<InventoryMetaItem> items = Utils.getInventoryItems(ilc, itemName);
+        List<InventoryMetaItem> items = Utils.getInventoryItems(itemName);
         if (items == null || items.size() == 0) {
             Utils.consolePrint("No items");
             return;
