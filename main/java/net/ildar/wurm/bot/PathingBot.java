@@ -104,6 +104,7 @@ public class PathingBot extends Bot
 		registerInputHandler(Inputs.follow, inPool(this::cmdFollow));
 		registerInputHandler(Inputs.murder, inPool(this::cmdMurder));
 		registerInputHandler(Inputs.groom, inPool(this::cmdGroom));
+		registerInputHandler(Inputs.shear, inPool(this::cmdShear));
 	}
 	
 	void cmdSpeed(String[] args)
@@ -498,6 +499,135 @@ public class PathingBot extends Bot
 		grooming = false;
 	}
 
+	boolean shearing = false;
+	Runnable onShearingStart = null;
+	Runnable onShearingDone = null;
+	void cmdShear(String[] args)
+	{
+		if(shearing)
+		{
+			shearing = false;
+			return;
+		}
+
+		enforceNoTasksRunning();
+
+		final InventoryMetaItem scissorsItem = Utils.locateToolItem("scissors");
+		if(scissorsItem == null)
+		{
+			Utils.consolePrint("Cannot shear without scissors!");
+			return;
+		}
+
+		CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
+		Object progressBar = Utils.rethrow(() -> Utils.getField(creationWindow, "progressBar"));
+
+		shearing = true;
+		final HashSet<Long> ignoredCreatures = new HashSet<>();
+		List<CreatureCellRenderable> creatures;
+		final Cell<CreatureCellRenderable> target = new Cell<>(null);
+		final Cell<Boolean> started = new Cell<>(false);
+		final Cell<Boolean> done = new Cell<>(false);
+		outer: while(!exiting && shearing)
+		{
+			if(done.val)
+			{
+				if(target.val != null)
+					ignoredCreatures.add(target.val.getId());
+				target.val = null;
+				done.val = false;
+			}
+
+			if(target.val == null)
+			{
+				creatures = Utils.findCreatures((creature, data) ->
+					!ignoredCreatures.contains(creature.getId()) &&
+					!creature.isItem() &&
+					creature.getKingdomId() == 0 &&
+					!creature.isControlled() &&
+					!creature.getHoverName().startsWith("preserved") &&
+					(creature.getHoverName().endsWith("sheep") || creature.getHoverName().endsWith("ram")) &&
+					!petItemRe.matcher(data.getHoverText()).find()
+				);
+				creatures.sort((l, r) -> Float.compare(Utils.sqdistFromPlayer(l), Utils.sqdistFromPlayer(r)));
+
+				target.val = creatures.stream().findFirst().orElse(null);
+				if(target.val == null)
+				{
+					Utils.consolePrint("Can't find any creatures to shear");
+					break;
+				}
+				
+				onShearingDone = () -> {
+					done.val = true;
+					onShearingDone = null;
+				};
+			}
+
+			while(Utils.sqdistFromPlayer(target.val) > 4 * 4)
+			{
+				if(exiting || !shearing)
+					break outer;
+
+				final Supplier<Vec2i> targetPos = () -> new Vec2i(
+					(int)(target.val.getXPos() / 4f),
+					(int)(target.val.getYPos() / 4f)
+				);
+				WalkStatus res = walkPath(targetPos);
+				if(res == WalkStatus.noPath)
+				{
+					ignoredCreatures.add(target.val.getId());
+					onShearingDone = null;
+					target.val = null;
+					hud.sendAction(PlayerAction.NO_TARGET, -1);
+					continue outer;
+				}
+				else if(res == WalkStatus.interrupted)
+					continue;
+				break;
+			}
+
+			final long actionSent = System.currentTimeMillis();
+			started.val = false;
+			onShearingStart = () -> {
+				started.val = true;
+				onShearingStart = null;
+			};
+			hud.getWorld().getServerConnection().sendAction(
+				scissorsItem.getId(),
+				new long[]{target.val.getId()},
+				PlayerAction.SHEAR
+			);
+			Utils.consolePrint("Shearing `%s`", target.val.getHoverName());
+			
+			while(!started.val && !done.val)
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+				if(exiting || !shearing) break outer;
+				
+				// action never started
+				if(System.currentTimeMillis() - actionSent >= 5000)
+				{
+					Utils.consolePrint("Timed out waiting for shearing to start");
+					continue outer;
+				}
+			}
+			// already sheared
+			if(done.val) continue outer;
+
+			while(
+				Utils.getPlayerStamina() < 0.99 ||
+				creationWindow.getActionInUse() > 0 ||
+				Utils.rethrow(() -> Utils.<Object, Float>getField(progressBar, "progress")) > 0f
+			)
+			{
+				Utils.rethrow(() -> ForkJoinPool.managedBlock(new SleepBlocker(250)));
+				if(exiting || !shearing) break outer;
+			}
+		}
+		shearing = false;
+	}
+
 	@Override
 	void work() throws Exception
 	{
@@ -517,6 +647,23 @@ public class PathingBot extends Bot
 			() -> {
 				if(onGroomingDone != null)
 					onGroomingDone.run();
+			}
+		);
+
+		registerEventProcessor(
+			line -> line.contains("You start shearing"),
+			() -> {
+				if(onShearingStart != null)
+					onShearingStart.run();
+			}
+		);
+		registerEventProcessor(
+			line ->
+				line.contains("You finish shearing") ||
+				line.contains("is already sheared"),
+			() -> {
+				if(onShearingDone != null)
+					onShearingDone.run();
 			}
 		);
 
@@ -764,6 +911,7 @@ public class PathingBot extends Bot
 		follow("Follow the given player", "name"),
 		murder("Find and murder nearby creatures", ""),
 		groom("Find and groom nearby creatures", ""),
+		shear("Find and shear nearby sheep", ""),
 		;
 		
 		String description;
