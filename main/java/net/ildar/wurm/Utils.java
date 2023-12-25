@@ -763,4 +763,43 @@ public class Utils {
         public T val;
         public Cell(T val) { this.val = val; }
     }
+
+    public static class Vec2i
+    {
+        public int x;
+        public int y;
+        
+        public Vec2i()
+        {
+            x = 0;
+            y = 0;
+        }
+        
+        public Vec2i(int x, int y)
+        {
+            this.x = x;
+            this.y = y;
+        }
+        
+        @Override
+        public int hashCode()
+        {
+            return 31 * Integer.hashCode(x) + Integer.hashCode(y);
+        }
+        
+        @Override
+        public boolean equals(Object obj)
+        {
+            if(this == obj) return true;
+            if(obj == null || !(obj instanceof Vec2i)) return false;
+            Vec2i rhs = (Vec2i)obj;
+            return x == rhs.x && y == rhs.y;
+        }
+        
+        @Override
+        public String toString()
+        {
+            return String.format("Vec2i(%d, %d)", x, y);
+        }
+    }
 }
