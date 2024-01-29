@@ -753,6 +753,8 @@ public class Utils {
     };
     public static boolean isGroomableCreature(CreatureCellRenderable creature) {
         final String name = creature.getHoverName().toLowerCase();
+        // ignore hell horse, hell chick, etc
+        if(name.contains("hell ")) return false;
         return Arrays
             .stream(groomableCreatureNames)
             .anyMatch(allowed -> name.contains(allowed))
