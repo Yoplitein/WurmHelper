@@ -108,6 +108,7 @@ public class AssistantBot extends Bot {
     private boolean groomingFailed;
     private final long groomIgnoreDuration = 150_000; // 2.5 minutes
 
+    private static final float notargetDistance = 4f * 10f; // 10 tiles
     private boolean notarget = false;
     private long lastNotarget = 0;
 
@@ -484,7 +485,7 @@ public class AssistantBot extends Bot {
                             Utils.consolePrint("=> %s", err);
                     }
 
-                    if(creature != null && Utils.sqdistFromPlayer(creature) > 10f * 10f) {
+                    if(creature != null && Utils.sqdistFromPlayer(creature) > notargetDistance * notargetDistance) {
                         lastNotarget = System.currentTimeMillis();
                         WurmHelper.hud.sendAction(PlayerAction.NO_TARGET, -10);
                     }
