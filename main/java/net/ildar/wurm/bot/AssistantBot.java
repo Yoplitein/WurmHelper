@@ -26,6 +26,7 @@ import com.wurmonline.client.renderer.gui.CreationWindow;
 import com.wurmonline.client.renderer.gui.InventoryListComponent;
 import com.wurmonline.client.renderer.gui.PaperDollInventory;
 import com.wurmonline.client.renderer.gui.PaperDollSlot;
+import com.wurmonline.client.renderer.gui.TargetWindow;
 import com.wurmonline.mesh.Tiles.Tile;
 import com.wurmonline.shared.constants.PlayerAction;
 
@@ -107,6 +108,9 @@ public class AssistantBot extends Bot {
     private boolean groomingFailed;
     private final long groomIgnoreDuration = 150_000; // 2.5 minutes
 
+    private boolean notarget = false;
+    private long lastNotarget = 0;
+
     private boolean verbose = false;
 
     public AssistantBot() {
@@ -151,6 +155,7 @@ public class AssistantBot extends Bot {
             input -> pave(true, String.join(" ", input).toLowerCase())
         );
         registerInputHandler(AssistantBot.InputKey.paveclear, input -> paveClear());
+        registerInputHandler(AssistantBot.InputKey.notarget, input -> toggleNotarget());
     }
 
     @Override
@@ -457,6 +462,32 @@ public class AssistantBot extends Bot {
                 } else if(grooming) {
                     Utils.consolePrint("Don't have a brush to groom with!");
                     grooming = false;
+                }
+
+                if(notarget && System.currentTimeMillis() - lastNotarget > 2500) {
+                    CreatureCellRenderable creature = null;
+                    try
+                    {
+                        TargetWindow window = ReflectionUtil.getPrivateField(
+                            WurmHelper.hud,
+                            ReflectionUtil.getField(WurmHelper.hud.getClass(), "targetWindow")
+                        );
+                        creature = ReflectionUtil.getPrivateField(
+                            window,
+                            ReflectionUtil.getField(window.getClass(), "creature")
+                        );
+                    }
+                    catch(Exception err)
+                    {
+                        Utils.consolePrint("Couldn't get target window or creature");
+                        if(verbose)
+                            Utils.consolePrint("=> %s", err);
+                    }
+
+                    if(creature != null && Utils.sqdistFromPlayer(creature) > 10f * 10f) {
+                        lastNotarget = System.currentTimeMillis();
+                        WurmHelper.hud.sendAction(PlayerAction.NO_TARGET, -10);
+                    }
                 }
             }
             sleep(timeout);
@@ -1099,6 +1130,16 @@ public class AssistantBot extends Bot {
             groomingBrush = -10;
         }
     }
+
+    private void toggleNotarget() {
+        notarget ^= true;
+        Utils.consolePrint(
+            "Bot will%s notarget far-away creatures",
+            notarget ?
+            "" :
+            "no longer"
+        );
+    }
     
     private void toggleVerbosity() {
         verbose = !verbose;
@@ -1244,7 +1285,9 @@ public class AssistantBot extends Bot {
         v("Toggle verbose mode. In verbose mode the " + AssistantBot.class.getSimpleName() + " will output additional info to the console", ""),
         pave("Paving helper that activates new materials", "item name"),
         pavec("Pave command for tile corners", "item name"),
-        paveclear("Forget which items have already been used for paving", "");
+        paveclear("Forget which items have already been used for paving", ""),
+        notarget("Automatically clear targeted creature if it is too far away", ""),
+        ;
 
         private String description;
         private String usage;
@@ -1291,6 +1334,3 @@ public class AssistantBot extends Bot {
         }
     }
 }
-
-
-
