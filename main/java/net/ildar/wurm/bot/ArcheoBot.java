@@ -96,6 +96,8 @@ public class ArcheoBot extends Bot {
 		List<InventoryMetaItem> unidentifiedFragments = new ArrayList<>();
 
 		outer: while(isActive()) {
+			waitOnPause();
+
 			if(investigating) {
 				if(tilesToBeInvestigated.isEmpty()) {
 					final Vec2i curPos = new Vec2i(
