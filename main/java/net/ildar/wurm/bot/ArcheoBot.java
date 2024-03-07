@@ -219,7 +219,14 @@ public class ArcheoBot extends Bot {
             return;
         }
         identifyInventories.add(ilc);
-        Utils.consolePrint("Bot will now identify fragments in %s", ilc.name);
+
+		String title;
+		try {
+			title = Utils.getField(inventoryComponent, "title");
+		} catch(IllegalAccessException | NoSuchFieldException err) {
+			title = "<unknown>";
+		}
+		Utils.consolePrint("Bot will now identify fragments in %s", title);
 	}
 
 	void clearIdentifyInventory(String[] input) {
