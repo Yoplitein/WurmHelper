@@ -298,7 +298,7 @@ public class ArcheoBot extends Bot {
 		CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
         Object progressBar = ReflectionUtil.getPrivateField(creationWindow, ReflectionUtil.getField(creationWindow.getClass(), "progressBar"));
 		final long start = System.currentTimeMillis();
-		while(true) {
+		while(isActive()) {
 			if(failed != null && failed.get()) {
 				return false;
 			}
@@ -315,12 +315,13 @@ public class ArcheoBot extends Bot {
 				return false;
 			}
 		}
+		return false;
 	}
 	
 	void waitActionFinished() throws Exception {
 		CreationWindow creationWindow = WurmHelper.hud.getCreationWindow();
         Object progressBar = ReflectionUtil.getPrivateField(creationWindow, ReflectionUtil.getField(creationWindow.getClass(), "progressBar"));
-		while(true) {
+		while(isActive()) {
 			float progress = ReflectionUtil.getPrivateField(progressBar, ReflectionUtil.getField(progressBar.getClass(), "progress"));
 			if(progress == 0f) {
 				break;
