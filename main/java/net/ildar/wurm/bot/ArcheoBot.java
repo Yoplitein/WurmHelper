@@ -107,11 +107,11 @@ public class ArcheoBot extends Bot {
 			waitOnPause();
 
 			if(investigating) {
+				final Vec2i curPos = new Vec2i(
+					WurmHelper.hud.getWorld().getPlayerCurrentTileX(),
+					WurmHelper.hud.getWorld().getPlayerCurrentTileY()
+				);
 				if(tilesToBeInvestigated.isEmpty()) {
-					final Vec2i curPos = new Vec2i(
-						WurmHelper.hud.getWorld().getPlayerCurrentTileX(),
-						WurmHelper.hud.getWorld().getPlayerCurrentTileY()
-					);
 					for(int y = -1; y < 2; y++)
 						for(int x = -1; x < 2; x++) {
 							final Vec2i next = new Vec2i(curPos.x + x,curPos.y + y);
@@ -131,18 +131,22 @@ public class ArcheoBot extends Bot {
 					investigatingDone = false;
 					
 					final Vec2i tile = tilesToBeInvestigated.get(tilesToBeInvestigated.size() - 1);
-					final long tool = useShovel ? shovelId : trowelId;
-					WurmHelper.hud.getWorld().getServerConnection().sendAction(
-						tool,
-						new long[]{Tiles.getTileId(tile.x, tile.y, 0)},
-						PlayerAction.INVESTIGATE
-					);
-
-					if(waitActionStarted(() -> investigatingDone))
-						waitActionFinished();
-					if(investigatingDone) {
+					if(Math.max(Math.abs(tile.x - curPos.x), Math.abs(tile.y - curPos.y)) > 1) {
 						tilesToBeInvestigated.remove(tilesToBeInvestigated.size() - 1);
-						tilesInvestigated.add(tile);
+					} else {
+						final long tool = useShovel ? shovelId : trowelId;
+						WurmHelper.hud.getWorld().getServerConnection().sendAction(
+							tool,
+							new long[]{Tiles.getTileId(tile.x, tile.y, 0)},
+							PlayerAction.INVESTIGATE
+						);
+						
+						if(waitActionStarted(() -> investigatingDone))
+						waitActionFinished();
+						if(investigatingDone) {
+							tilesToBeInvestigated.remove(tilesToBeInvestigated.size() - 1);
+							tilesInvestigated.add(tile);
+						}
 					}
 				}
 			}
