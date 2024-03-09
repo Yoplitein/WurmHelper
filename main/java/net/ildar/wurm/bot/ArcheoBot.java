@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +55,6 @@ public class ArcheoBot extends Bot {
 	AreaAssistant areaAssistant = new AreaAssistant(this);
 
 	boolean investigatingDone = false;
-	boolean identifyingDone = false;
 
 	public ArcheoBot() {
 		registerInputHandler(InputKey.iv, this::toggleInvestigating);
@@ -74,10 +74,6 @@ public class ArcheoBot extends Bot {
 				;
 			},
 			() -> investigatingDone = true
-		);
-		registerEventProcessor(
-			msg -> msg.toLowerCase().contains("you successfully identify the fragment"),
-			() -> identifyingDone = true
 		);
 
 		areaAssistant.setMoveAheadDistance(3);
@@ -99,12 +95,16 @@ public class ArcheoBot extends Bot {
 		Set<Vec2i> tilesInvestigated = new HashSet<>();
 		List<Vec2i> tilesToBeInvestigated = new ArrayList<>();
 
-		List<InventoryMetaItem> unidentifiedFragments = new ArrayList<>();
+		List<InventoryMetaItem> unidentified = new ArrayList<>();
 		
-		Map<String, List<InventoryMetaItem>> uncombinedFragments = new HashMap<>();
+		Map<String, List<InventoryMetaItem>> uncombined = new HashMap<>();
+
+		final int maxActions = Utils.getMaxActionNumber();
 
 		outer: while(isActive()) {
 			waitOnPause();
+
+			boolean didWork = false;
 
 			if(investigating) {
 				final Vec2i curPos = new Vec2i(
@@ -128,6 +128,7 @@ public class ArcheoBot extends Bot {
 				}
 
 				if(!tilesToBeInvestigated.isEmpty()) {
+					didWork = true;
 					investigatingDone = false;
 					
 					final Vec2i tile = tilesToBeInvestigated.get(tilesToBeInvestigated.size() - 1);
@@ -152,26 +153,24 @@ public class ArcheoBot extends Bot {
 			}
 
 			if(identifying) {
-				if(unidentifiedFragments.isEmpty()) {
-					for(InventoryListComponent ilc: identifyInventories) {
-						List<InventoryMetaItem> found = Utils.getInventoryItems(
-							ilc,
-							item -> unidentifiedRegex.matcher(item.getDisplayName()).find()
-						);
-						if(found != null)
-							unidentifiedFragments.addAll(found);
-					}
-
-					if(unidentifiedFragments.isEmpty()) {
-						Thread.sleep(1000);
-						continue outer;
-					}
+				unidentified.clear();
+				for(InventoryListComponent ilc: identifyInventories) {
+					List<InventoryMetaItem> found = Utils.getInventoryItems(
+						ilc,
+						item -> unidentifiedRegex.matcher(item.getDisplayName()).find()
+					);
+					if(found != null)
+						unidentified.addAll(found);
 				}
+				
+				Iterator<InventoryMetaItem> iter = unidentified.iterator();
+				boolean anyQueued = false;
+				for(int action = 0; action < maxActions; action++) {
+					if(!iter.hasNext()) break;
+					anyQueued = true;
 
-				if(!unidentifiedFragments.isEmpty()) {
-					identifyingDone = false;
 
-					final InventoryMetaItem fragment = unidentifiedFragments.get(unidentifiedFragments.size() - 1);
+					InventoryMetaItem fragment = iter.next();
 					int improveIcon = fragment.getImproveIconId();
 					if(improveIcon == identifyChisel) {
 						WurmHelper.hud.getWorld().getServerConnection().sendAction(
@@ -187,22 +186,22 @@ public class ArcheoBot extends Bot {
 						);
 					} else {
 						Utils.consolePrint("Don't know how to identify fragment `%s`!", fragment.getDisplayName());
-						unidentifiedFragments.remove(unidentifiedFragments.size() - 1);
-						continue outer;
+						action--;
 					}
-					
+				}
+				
+				if(anyQueued) {
+					didWork = true;
 					if(!waitActionStarted(null))
 						continue outer;
 					waitActionFinished();
-					if(identifyingDone)
-						unidentifiedFragments.remove(unidentifiedFragments.size() - 1);
 				}
 			}
 
 			if(combining) {
-				uncombinedFragments.clear();
+				uncombined.clear();
 				List<InventoryMetaItem> rawItems = Utils.getInventoryItems(
-					item -> identifiedRegex.matcher(item.getBaseName()).matches()
+					item -> identifiedRegex.matcher(item.getBaseName()).find()
 				);
 				for(InventoryMetaItem item: rawItems) {
 					// `ore fragment [1/3], iron` => `iron ore`
@@ -213,7 +212,7 @@ public class ArcheoBot extends Bot {
 						type = String.join(" ", displayName.substring(material + 2), type);
 					type = type.substring(0, type.indexOf(" fragment"));
 					
-					uncombinedFragments.compute(type, (k, v) -> {
+					uncombined.compute(type, (k, v) -> {
 						if(v == null) {
 							return new ArrayList<>(Collections.singletonList(item));
 						} else {
@@ -223,7 +222,10 @@ public class ArcheoBot extends Bot {
 					});
 				}
 
-				for(List<InventoryMetaItem> items: uncombinedFragments.values()) {
+				int actions = maxActions;
+				for(List<InventoryMetaItem> items: uncombined.values()) {
+					if(actions <= 0)
+						break;
 					if(items.size() < 2)
 						continue;
 					
@@ -234,17 +236,23 @@ public class ArcheoBot extends Bot {
 						.map(InventoryMetaItem::getId)
 						.mapToLong(v -> v)
 						.toArray();
+					actions -= fragments.length;
 					WurmHelper.hud.getWorld().getServerConnection().sendAction(
 						head.getId(),
 						fragments,
 						PlayerAction.COMBINE_FRAGMENT
 					);
-					
+				}
+				if(actions != maxActions) {
+					didWork = true;
 					if(!waitActionStarted(null))
 						continue outer;
 					waitActionFinished();
 				}
 			}
+
+			if(!didWork)
+				Thread.sleep(500);
 		}
 	}
 
